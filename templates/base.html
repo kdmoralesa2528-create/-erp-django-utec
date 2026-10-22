@@ -252,16 +252,15 @@
 <!-- NAVBAR -->
 <nav class="erp-navbar">
     <a class="erp-brand" href="/">📦 ERP Django <span>· UTEC Celaya</span></a>
-    <div class="erp-nav-links">
-        <a href="{% url 'productos:inicio' %}"
+   <a href="{% url 'productos:lista' %}"
            class="erp-nav-link {% block nav_productos %}{% endblock %}">Productos</a>
-        <a href="{% url 'clientes:inicio' %}"
+        <a href="{% url 'clientes:lista' %}"
            class="erp-nav-link {% block nav_clientes %}{% endblock %}">Clientes</a>
-        <a href="{% url 'proveedores:inicio' %}"
+        <a href="{% url 'proveedores:lista' %}"
            class="erp-nav-link {% block nav_proveedores %}{% endblock %}">Proveedores</a>
-        <a href="{% url 'ventas:inicio' %}"
+        <a href="{% url 'ventas:lista' %}"
            class="erp-nav-link {% block nav_ventas %}{% endblock %}">Ventas</a>
-        <a href="{% url 'reportes:inicio' %}"
+        <a href="{% url 'inicio' %}"
            class="erp-nav-link {% block nav_reportes %}{% endblock %}">Reportes</a>
         <a href="/admin/" class="erp-nav-link {% if '/admin/' in request.path %}active{% endif %}">Admin</a>
         {% if user.is_authenticated %}
