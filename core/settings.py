@@ -1,8 +1,5 @@
 # core/settings.py
-<<<<<<< HEAD
-=======
 import dj_database_url
->>>>>>> c840f57 (Auto create superuser y correccion de persistencia)
 from pathlib import Path
 import os
 
@@ -67,17 +64,10 @@ TEMPLATES = [
 WSGI_APPLICATION = 'core.wsgi.application'
 
 DATABASES = {
-<<<<<<< HEAD
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-=======
     'default': dj_database_url.config(
         default='sqlite:///' + os.path.join(BASE_DIR, 'db.sqlite3'),
         conn_max_age=600
     )
->>>>>>> c840f57 (Auto create superuser y correccion de persistencia)
 }
 
 LANGUAGE_CODE = 'es-mx'
@@ -156,9 +146,7 @@ ACCOUNT_SESSION_REMEMBER       = True           # recordar sesión
 # LOGIN_URL           = '/accounts/login/'
 # LOGIN_REDIRECT_URL  = '/productos/'
 LOGOUT_REDIRECT_URL = '/'
-<<<<<<< HEAD
 LOGIN_REDIRECT_URL = '/productos/'
-=======
 LOGIN_REDIRECT_URL = '/productos/'
 
 
@@ -179,4 +167,4 @@ try:
         print("Superusuario creado con éxito.")
 except Exception as e:
     pass
->>>>>>> c840f57 (Auto create superuser y correccion de persistencia)
+
