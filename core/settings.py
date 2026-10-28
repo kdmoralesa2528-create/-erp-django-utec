@@ -152,19 +152,3 @@ LOGIN_REDIRECT_URL = '/productos/'
 
 
 
-# Creación automática de superusuario para Render
-import os
-from django.contrib.auth import get_user_model
-
-User = get_user_model()
-ADMIN_USERNAME = os.environ.get('DJANGO_SUPERUSER_USERNAME', 'admin')
-ADMIN_EMAIL = os.environ.get('DJANGO_SUPERUSER_EMAIL', 'admin@example.com')
-ADMIN_PASSWORD = os.environ.get('DJANGO_SUPERUSER_PASSWORD', 'admin1234')
-
-try:
-    if not User.objects.filter(username=ADMIN_USERNAME).exists():
-        User.objects.create_superuser(ADMIN_USERNAME, ADMIN_EMAIL, ADMIN_PASSWORD)
-        print("Superusuario creado con éxito.")
-except Exception as e:
-    pass
-
