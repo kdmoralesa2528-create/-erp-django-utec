@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Ventas{% endblock %}
+{% block nav_ventas %}active{% endblock %}
+
+{% block content %}
+<div class="erp-page-title">
+    <h2>💰 Ventas</h2>
+</div>
+
+{% if ventas %}
+<table class="erp-table">
+    <thead>
+        <tr><th>#</th><th>Cliente</th><th>Fecha</th><th>Total</th></tr>
+    </thead>
+    <tbody>
+        {% for v in ventas %}
+        <tr>
+            <td><a href="{% url 'ventas:detalle' v.pk %}">#{{ v.pk }}</a></td>
+            <td>{{ v.cliente }}</td>
+            <td>{{ v.fecha|date:"d/m/Y H:i" }}</td>
+            <td style="font-weight:700;color:var(--clr-gold);">${{ v.total }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="erp-alert-info">No hay ventas registradas aún.</div>
+{% endif %}
+{% endblock %}
