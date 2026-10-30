@@ -1,6 +1,6 @@
 """Modelos de la app productos — Espiral 2 W06."""
 from decimal import Decimal
-
+from .validators import validar_imagen_producto
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
@@ -45,7 +45,18 @@ class Producto(models.Model):
         null=True, blank=True,
         related_name='productos', verbose_name='Proveedor'
     )
+    
     activo = models.BooleanField(default=True, verbose_name='Activo')
+    # Campo nuevo W11 con validador
+    imagen = models.ImageField(
+        upload_to='productos/',
+        null=True,
+        blank=True,
+        verbose_name='Imagen del producto',
+        help_text='Formatos permitidos: JPEG, PNG, WEBP. Máximo 5 MB.',
+        validators=[validar_imagen_producto],
+    )
+
     creado = models.DateTimeField(auto_now_add=True, verbose_name='Fecha de registro')
 
     def clean(self) -> None:
@@ -53,7 +64,6 @@ class Producto(models.Model):
 
         Ejecutadas por full_clean() (formularios y llamadas explícitas).
         No se ejecutan con save() directo.
-
         Raises:
             ValidationError: si precio < 0 o stock < 0.
         """
