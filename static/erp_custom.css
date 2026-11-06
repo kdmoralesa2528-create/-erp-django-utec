@@ -1,0 +1,97 @@
+<<<<<<< HEAD
+/* Pone la lluvia UNICAMENTE en el fondo del panel Admin */
+body, 
+.content-wrapper, 
+#content, 
+.content,
+html {
+=======
+/* static/erp_custom.css */
+.erp-module-card {
+    transition: transform .2s, box-shadow .2s;
+    cursor: pointer;
+}
+.erp-module-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-md);
+}
+
+.text-gold   { color: var(--clr-gold)  !important; }
+.text-navy   { color: var(--clr-navy)  !important; }
+.bg-navy     { background: var(--clr-navy) !important; }
+.border-gold { border-color: var(--clr-gold) !important; }
+
+.font-mono {
+    font-family: 'JetBrains Mono', Consolas, monospace !important;
+    font-size: .9em;
+}
+
+
+/* ── JAZZMIN: Override de colores con Fable 5 AzulERP ────────────────── */
+
+/* Sidebar color navy */
+.main-sidebar, .sidebar { background-color: #0A2342 !important; }
+
+/* Navbar color navy */
+.main-header.navbar { background-color: #0A2342 !important; }
+
+/* Brand / logo area */
+.brand-link { border-bottom: 1px solid #B8860B !important; }
+.brand-text { color: #D4AF37 !important; font-weight: 700 !important; }
+
+/* Sidebar links */
+.nav-sidebar .nav-link { color: rgba(255,255,255,.82) !important; }
+.nav-sidebar .nav-link:hover,
+.nav-sidebar .nav-link.active {
+    background-color: #1B4F8A !important;
+    color: #FFFFFF !important;
+}
+
+/* Accent: botones y badges en dorado */
+.accent-navy .nav-sidebar .nav-link.active {
+    background-color: #B8860B !important;
+}
+
+/* Footer */
+.main-footer { border-top: 2px solid #B8860B; }
+
+
+
+
+/* Fondo de lluvia para el Admin */
+.content-wrapper {
+>>>>>>> c840f57 (Auto create superuser y correccion de persistencia)
+    background-image: url('/static/img/lluvia.jpg') !important;
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    background-attachment: fixed !important;
+<<<<<<< HEAD
+    background-color: transparent !important;
+}
+
+/* Quita los fondos blancos intermedios de Jazzmin */
+#main-content, 
+.content-header,
+.container-fluid {
+    background: transparent !important;
+}
+
+/* Mantiene la lista/tabla de Clientes en blanco semitransparente */
+.card, 
+.table-responsive, 
+#changelist {
+    background-color: rgba(255, 255, 255, 0.90) !important;
+    backdrop-filter: blur(5px);
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+=======
+}
+
+/* Transparencia para contenedores del Admin */
+.card, .content-header, .table-responsive {
+    background-color: rgba(255, 255, 255, 0.88) !important;
+    backdrop-filter: blur(4px);
+    border-radius: 8px;
+>>>>>>> c840f57 (Auto create superuser y correccion de persistencia)
+}
