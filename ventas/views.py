@@ -1,5 +1,7 @@
 """Vistas de la app ventas."""
 from django.conf import settings
+import weasyprint
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
