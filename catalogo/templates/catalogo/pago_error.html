@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container py-5 text-center">
+    <div class="card shadow p-4 mx-auto" style="max-width: 500px;">
+        <h2 class="text-danger mb-3">Error en el Pago</h2>
+        <p class="lead">No se pudo procesar la transacción. Intenta nuevamente.</p>
+        <a href="{% url 'catalogo:carrito' %}" class="btn btn-warning mt-3">Regresar al Carrito</a>
+    </div>
+</div>
+{% endblock %}
+

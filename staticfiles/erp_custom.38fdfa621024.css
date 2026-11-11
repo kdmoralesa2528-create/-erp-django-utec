@@ -1,0 +1,30 @@
+/* Pone la lluvia UNICAMENTE en el fondo del panel Admin */
+body, 
+.content-wrapper, 
+#content, 
+.content,
+html {
+    background-image: url("/static/img/lluvia.d217f58afbc5.jpg") !important;
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    background-attachment: fixed !important;
+    background-color: transparent !important;
+}
+
+/* Quita los fondos blancos intermedios de Jazzmin */
+#main-content, 
+.content-header,
+.container-fluid {
+    background: transparent !important;
+}
+
+/* Mantiene la lista/tabla de Clientes en blanco semitransparente */
+.card, 
+.table-responsive, 
+#changelist {
+    background-color: rgba(255, 255, 255, 0.90) !important;
+    backdrop-filter: blur(5px);
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
