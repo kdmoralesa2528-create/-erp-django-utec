@@ -3,7 +3,7 @@
 {% block content %}
 <div class="container py-4">
     <h2>Carrito de Compras</h2>
-    {% if carrito %}
+    {% if items %}
         <table class="table align-middle">
             <thead>
                 <tr>
@@ -24,7 +24,7 @@
                 {% endfor %}
             </tbody>
         </table>
-        <h4>Total: ${{ totales.total }}</h4>
+        <h4>Total: ${{ total }}</h4>
         <a href="{% url 'catalogo:checkout' %}" class="btn btn-success">Proceder al Pago</a>
     {% else %}
         <p>Tu carrito está vacío.</p>
