@@ -13,7 +13,21 @@
             </li>
             {% endfor %}
         </ul>
-        <h4 class="mb-4">Total: ${{ totales.total }}</h4>
+
+        <div class="border-top pt-2 mb-4">
+            <div class="d-flex justify-content-between text-muted">
+                <span>Subtotal:</span>
+                <span>${{ totales.subtotal }}</span>
+            </div>
+            <div class="d-flex justify-content-between text-muted">
+                <span>IVA (16%):</span>
+                <span>${{ totales.iva }}</span>
+            </div>
+            <div class="d-flex justify-content-between fw-bold fs-4 mt-2">
+                <span>Total:</span>
+                <span>${{ totales.total }}</span>
+            </div>
+        </div>
 
         {% if not client_secret %}
             <form method="POST">
