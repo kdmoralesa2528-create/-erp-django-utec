@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 600px;">
+    <h2>Checkout</h2>
+    <div class="card p-4 shadow-sm">
+        <h5>Resumen de tu pedido:</h5>
+        <ul class="list-group list-group-flush mb-3">
+            {% for item in items %}
+            <li class="list-group-item d-flex justify-content-between">
+                <span>{{ item.nombre }} x {{ item.cantidad }}</span>
+                <span>${{ item.subtotal }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+
+        <div class="border-top pt-2 mb-4">
+            <div class="d-flex justify-content-between text-muted">
+                <span>Subtotal:</span>
+                <span>${{ totales.subtotal }}</span>
+            </div>
+            <div class="d-flex justify-content-between text-muted">
+                <span>IVA (16%):</span>
+                <span>${{ totales.iva_monto }}</span>
+            </div>
+            <div class="d-flex justify-content-between fw-bold fs-4 mt-2">
+                <span>Total:</span>
+                <span>${{ totales.total }}</span>
+            </div>
+        </div>
+
+        {% if not client_secret %}
+            <form method="POST">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary w-100">
+                    Continuar al Pago con Tarjeta
+                </button>
+            </form>
+        {% else %}
+            <form id="payment-form">
+                <label for="card-element" class="form-label fw-bold">
+                    Datos de Tarjeta (Prueba: 4242 4242 4242 4242)
+                </label>
+                <div id="card-element" class="form-control p-3 mb-3"></div>
+                <div id="card-errors" class="text-danger mb-3" role="alert"></div>
+                <button id="submit-btn" type="submit" class="btn btn-success w-100">
+                    Pagar ${{ totales.total }}
+                </button>
+            </form>
+
+            <script src="https://js.stripe.com/v3/"></script>
+            <script>
+                const stripe = Stripe("{{ publishable_key }}");
+                const elements = stripe.elements();
+                const card = elements.create("card");
+                card.mount("#card-element");
+
+                const form = document.getElementById("payment-form");
+                const submitBtn = document.getElementById("submit-btn");
+                const errorDiv = document.getElementById("card-errors");
+
+                form.addEventListener("submit", async (e) => {
+                    e.preventDefault();
+                    submitBtn.disabled = true;
+                    errorDiv.textContent = "";
+
+                    const { error, paymentIntent } = await stripe.confirmCardPayment("{{ client_secret }}", {
+                        payment_method: { card: card }
+                    });
+
+                    if (error) {
+                        errorDiv.textContent = error.message;
+                        submitBtn.disabled = false;
+                    } else if (paymentIntent && paymentIntent.status === "succeeded") {
+                        window.location.href = "{% url 'catalogo:pago_exitoso' pedido.pk %}";
+                    }
+                });
+            </script>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
