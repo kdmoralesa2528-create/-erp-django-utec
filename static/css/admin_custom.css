@@ -1,0 +1,86 @@
+/* 1. Barra lateral en Rosa neón oscuro (#A51E63) */
+.main-sidebar,
+.main-sidebar .brand-link,
+.sidebar-dark-primary {
+  background-color: #A51E63 !important;
+}
+
+.nav-sidebar .nav-item > .nav-link.active {
+  background-color: rgba(255, 255, 255, 0.22) !important;
+  color: #FFFFFF !important;
+  font-weight: 600;
+}
+
+.nav-sidebar .nav-item > .nav-link:hover {
+  background-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+/* 2. Fondo con la imagen cerezos.webp */
+html,
+body,
+.wrapper,
+.content-wrapper {
+  background-image: url('../img/cerezos.webp') !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+
+/* Hacer transparente cualquier contenedor intermedio que tape la imagen */
+.content-wrapper > .content,
+.content-wrapper > .content-header,
+#content,
+#content-main {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* 3. Tarjetas transparentes con borde intenso Morado ciruela (#702B70) */
+.card,
+.module,
+.timeline > div > .timeline-item,
+.info-box,
+.small-box {
+  background: rgba(255, 255, 255, 0.45) !important;
+  background-color: rgba(255, 255, 255, 0.45) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  border: 4px solid #702B70 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22), 0 0 14px rgba(112, 43, 112, 0.85) !important;
+  transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.card:hover,
+.timeline > div > .timeline-item:hover {
+  background: rgba(255, 255, 255, 0.65) !important;
+  background-color: rgba(255, 255, 255, 0.65) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.28), 0 0 18px rgba(112, 43, 112, 1) !important;
+}
+
+/* Interior de las tarjetas transparente */
+.card-header,
+.card-body,
+.card-footer,
+.card table,
+.card td,
+.card th {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+.card-header {
+  border-bottom: 2px solid rgba(112, 43, 112, 0.4) !important;
+}
+
+/* Títulos legibles sobre el fondo */
+.content-header h1,
+.content-wrapper h1,
+.content-wrapper h2,
+.content-wrapper h3 {
+  color: #1F1226 !important;
+  text-shadow: 0 1px 6px rgba(255, 255, 255, 0.95);
+  font-weight: 700;
+}

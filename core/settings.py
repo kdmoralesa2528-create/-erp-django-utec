@@ -116,16 +116,10 @@ JAZZMIN_SETTINGS = {
     },
     'show_sidebar':             True,
     'navigation_expanded':      True,
-    'custom_css': 'css/custom_admin.css',
+    'custom_css': 'css/admin_custom.css',
 }
 
-JAZZMIN_UI_TWEAKS = {
-    'theme':                    'default',
-    'brand_colour':             'navbar-dark',
-    'accent':                   'accent-navy',
-    'navbar':                   'navbar-dark',
-    'sidebar':                  'sidebar-dark-navy',
-}
+JAZZMIN_UI_TWEAKS = {}
 
 # ── DJANGO SITES (requerido por allauth) ──────────────────────────────────
 SITE_ID = 1
