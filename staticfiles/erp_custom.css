@@ -1,0 +1,8 @@
+/* Estilos personalizados limpios */
+.erp-module-card {
+  transition: transform .2s, box-shadow .2s;
+  cursor: pointer;
+}
+.erp-module-card:hover {
+  transform: translateY(-3px);
+}

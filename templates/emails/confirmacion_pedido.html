@@ -1,0 +1,30 @@
+{% extends "emails/base_email.html" %}
+
+{% block content %}
+<h3>¡Hola, {{ pedido.cliente.nombre }}!</h3>
+<p>Hemos recibido y confirmado el pago de tu pedido <strong>#{{ pedido.numero_pedido }}</strong>.</p>
+
+<table>
+    <thead>
+        <tr>
+            <th>Producto</th>
+            <th>Cantidad</th>
+            <th>Precio Unitario</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in pedido.items_snapshot %}
+        <tr>
+            <td>{{ item.nombre }}</td>
+            <td>{{ item.cantidad }}</td>
+            <td>${{ item.precio }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<p><strong>Total pagado:</strong> ${{ pedido.total_pagado }}</p>
+<p><strong>Estado actual:</strong> {{ pedido.get_estado_display }}</p>
+
+<p>Gracias por tu compra.</p>
+{% endblock %}

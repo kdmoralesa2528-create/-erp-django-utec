@@ -1,0 +1,1009 @@
+<script>
+    let animacionIdNivel2 = null;
+    let scrollFondo = 0;
+
+    const jefe2 = {
+        x: 75, y: 310, radio: 24,
+        vidaMax: 150, vida: 150,
+        fase: 1,
+        muriendo: false,
+        inicioMuerte: 0,
+        danioFlashHasta: 0,
+        velocidadY: 3.6,
+        ultimoDisparo: 0,
+        modoLatigo: false,
+        inicioCicloLatigo: 0,
+        estadoLatigo: 'inactivo',
+        inicioEstadoLatigo: 0,
+        anguloLatigo: 0,
+        largoLatigoActual: 0,
+        largoLatigoMax: 680
+    };
+
+    let balasEnemigas = [];
+    let bombasCampo = [];
+    let corazonesCampo = [];
+    let bombasLanzadas = [];
+    let explosionesBomba = [];
+    let particulasMuerte2 = [];
+    let particulasPolvo = [];
+    let ultimaBombaGenerada = 0;
+    let ultimoCorazonGenerado = 0;
+    let tieneBomba = false;
+
+    const edificiosOeste = [
+        { x: 0,   w: 170, h: 155, techo: 'plano',   color: '#8c583a', letrero: 'SALOON',  puertasDobles: true },
+        { x: 195, w: 145, h: 135, techo: 'pico',    color: '#6b4423', letrero: 'SHERIFF', puertasDobles: false },
+        { x: 365, w: 185, h: 165, techo: 'balcon',  color: '#7a2e2e', letrero: 'HOTEL',   puertasDobles: false },
+        { x: 575, w: 140, h: 130, techo: 'pico',    color: '#9c6644', letrero: 'BANK',    puertasDobles: false },
+        { x: 740, w: 165, h: 145, techo: 'plano',   color: '#5c3a21', letrero: 'STABLES', puertasDobles: true },
+        { x: 930, w: 155, h: 140, techo: 'balcon',  color: '#874c2b', letrero: 'GENERAL', puertasDobles: false }
+    ];
+    const anchoTotalPueblo = 1110;
+
+    window.addEventListener('keydown', e => {
+        if (e.code === 'Space' && juegoActivo && nivelActual === 2) {
+            e.preventDefault();
+            lanzarBombaNivel2();
+        }
+    });
+
+    function actualizarHUDNivel2() {
+        const el = document.getElementById('cargas-energia');
+        if (!el) return;
+        const danioTxt = modoExtremo ? '5 daño' : '7 daño';
+        if (tieneBomba) {
+            el.textContent = `💣 Bomba: 1/1 [¡LISTA - ESPACIO! (${danioTxt})]`;
+            el.style.color = '#FFF52D';
+        } else {
+            el.textContent = `💣 Bomba: 0/1 (Recoge en el camino)`;
+            el.style.color = '#ff9f1c';
+        }
+    }
+
+    function iniciarNivel2() {
+        const ahora = Date.now();
+        jefe2.x = 75;
+        jefe2.y = 310;
+        jefe2.vidaMax = modoExtremo ? 250 : 150;
+        jefe2.vida = jefe2.vidaMax;
+        jefe2.fase = modoExtremo ? 2 : 1;
+        jefe2.velocidadY = modoExtremo ? 4.6 : 3.6;
+        jefe2.muriendo = false;
+        jefe2.inicioMuerte = 0;
+        jefe2.danioFlashHasta = 0;
+        jefe2.ultimoDisparo = 0;
+
+        jefe2.modoLatigo = false;
+        jefe2.inicioCicloLatigo = ahora + 3000;
+        jefe2.estadoLatigo = 'inactivo';
+        jefe2.largoLatigoActual = 0;
+
+        balasEnemigas = [];
+        bombasCampo = [];
+        corazonesCampo = [];
+        bombasLanzadas = [];
+        explosionesBomba = [];
+        particulasMuerte2 = [];
+        particulasPolvo = [];
+        ultimaBombaGenerada = ahora;
+        ultimoCorazonGenerado = ahora;
+        tieneBomba = false;
+        scrollFondo = 0;
+
+        jugador.vidasMax = 3;
+        jugador.vidas = 3;
+        actualizarCorazonesUI();
+
+        jugador.x = canvas.width - 220;
+        jugador.y = 300;
+        jugador.tam = 34;
+        jugador.vel = 6.2;
+
+        actualizarHUDNivel2();
+
+        cancelAnimationFrame(animacionId);
+        cancelAnimationFrame(animacionIdNivel2);
+        bucleJuegoNivel2();
+    }
+
+    function lanzarBombaNivel2() {
+        if (!puedeMoverse || jugador.vidas <= 0 || jefe2.vida <= 0 || jefe2.muriendo) return;
+        if (!tieneBomba) return;
+
+        tieneBomba = false;
+        actualizarHUDNivel2();
+
+        bombasLanzadas.push({
+            x: jugador.x,
+            y: jugador.y + jugador.tam / 2,
+            radio: 13,
+            vel: 12
+        });
+    }
+
+    function recibirDanioNivel2(cantidad = 1) {
+        const ahora = Date.now();
+        if (ahora < jugador.invulnerableHasta || jugador.vidas <= 0 || jefe2.vida <= 0 || jefe2.muriendo) return;
+        jugador.vidas = Math.max(0, jugador.vidas - cantidad);
+        jugador.invulnerableHasta = ahora + 1200;
+        actualizarCorazonesUI();
+
+        if (jugador.vidas <= 0) {
+            puedeMoverse = false;
+            textoContador = 'GAME OVER';
+            const etiqueta = modoExtremo ? 'NIVEL 2 EXTREMO' : 'NIVEL 2';
+            document.getElementById('titulo-nivel-activo').textContent = etiqueta + ' — DERROTADO';
+        }
+    }
+
+    function moverJugadorNivel2() {
+        if (!puedeMoverse) return;
+        if (teclas.ArrowUp) jugador.y -= jugador.vel;
+        if (teclas.ArrowDown) jugador.y += jugador.vel;
+        if (teclas.ArrowLeft) jugador.x -= jugador.vel;
+        if (teclas.ArrowRight) jugador.x += jugador.vel;
+
+        if (jugador.x < 145) jugador.x = 145;
+        if (jugador.y < 215) jugador.y = 215;
+        if (jugador.x + jugador.tam > canvas.width - 15) jugador.x = canvas.width - 15 - jugador.tam;
+        if (jugador.y + jugador.tam > canvas.height - 22) jugador.y = canvas.height - 22 - jugador.tam;
+    }
+
+    function actualizarObjetosCaminoNivel2() {
+        if (!puedeMoverse || jugador.vidas <= 0 || jefe2.vida <= 0 || jefe2.muriendo) return;
+        const ahora = Date.now();
+
+        if (bombasCampo.length < 3 && ahora - ultimaBombaGenerada >= 1700) {
+            ultimaBombaGenerada = ahora;
+            const minY = 235;
+            const maxY = canvas.height - 45;
+            bombasCampo.push({
+                x: canvas.width + 20,
+                y: Math.random() * (maxY - minY) + minY,
+                radio: 12,
+                velAtras: 5.2,
+                creadoEn: ahora
+            });
+        }
+
+        if (!modoExtremo && ahora - ultimoCorazonGenerado >= 25000) {
+            ultimoCorazonGenerado = ahora;
+            const minY = 235;
+            const maxY = canvas.height - 45;
+            corazonesCampo.push({
+                x: canvas.width + 20,
+                y: Math.random() * (maxY - minY) + minY,
+                radio: 13,
+                velAtras: 5.2,
+                creadoEn: ahora
+            });
+        }
+
+        const centroJugX = jugador.x + jugador.tam / 2;
+        const centroJugY = jugador.y + jugador.tam / 2;
+
+        bombasCampo = bombasCampo.filter(b => {
+            b.x -= b.velAtras;
+            const dist = Math.hypot(centroJugX - b.x, centroJugY - b.y);
+            if (dist <= b.radio + jugador.tam * 0.55) {
+                if (!tieneBomba) {
+                    tieneBomba = true;
+                    actualizarHUDNivel2();
+                    return false;
+                }
+            }
+            return b.x > -30;
+        });
+
+        corazonesCampo = corazonesCampo.filter(c => {
+            c.x -= c.velAtras;
+            const dist = Math.hypot(centroJugX - c.x, centroJugY - c.y);
+            if (dist <= c.radio + jugador.tam * 0.55) {
+                if (jugador.vidas < jugador.vidasMax) {
+                    jugador.vidas = Math.min(jugador.vidasMax, jugador.vidas + 1);
+                    actualizarCorazonesUI();
+                }
+                return false;
+            }
+            return c.x > -30;
+        });
+
+        const danioBomba = modoExtremo ? 5 : 7;
+        bombasLanzadas = bombasLanzadas.filter(bl => {
+            const dx = jefe2.x - bl.x;
+            const dy = jefe2.y - bl.y;
+            const dist = Math.hypot(dx, dy);
+
+            if (dist <= bl.radio + 30) {
+                jefe2.vida = Math.max(0, jefe2.vida - danioBomba);
+                jefe2.danioFlashHasta = ahora + 180;
+
+                explosionesBomba.push({
+                    x: bl.x,
+                    y: bl.y,
+                    radio: 10,
+                    vida: 1.0
+                });
+
+                if (!modoExtremo && jefe2.vida <= 75 && jefe2.fase === 1) {
+                    jefe2.fase = 2;
+                    jefe2.velocidadY = 4.6;
+                    document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 2 — ¡FURIA ROJA!';
+                }
+
+                if (jefe2.vida <= 0 && !jefe2.muriendo) {
+                    jefe2.muriendo = true;
+                    jefe2.inicioMuerte = ahora;
+                    puedeMoverse = false;
+                    balasEnemigas = [];
+                    bombasCampo = [];
+                    corazonesCampo = [];
+                    jefe2.estadoLatigo = 'inactivo';
+                }
+                return false;
+            }
+
+            bl.x += (dx / dist) * bl.vel;
+            bl.y += (dy / dist) * bl.vel;
+            return true;
+        });
+
+        explosionesBomba.forEach(ex => {
+            ex.radio += 3.5;
+            ex.vida -= 0.06;
+        });
+        explosionesBomba = explosionesBomba.filter(ex => ex.vida > 0);
+    }
+
+    function actualizarAnimacionDerrotaNivel2() {
+        if (!jefe2.muriendo) return;
+        const ahora = Date.now();
+        const transcurrido = ahora - jefe2.inicioMuerte;
+
+        if (transcurrido < 2200) {
+            for (let i = 0; i < 4; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const vel = 1.5 + Math.random() * 4.5;
+                particulasMuerte2.push({
+                    x: jefe2.x + (Math.random() - 0.5) * 50,
+                    y: jefe2.y + (Math.random() - 0.5) * 50,
+                    vx: Math.cos(ang) * vel,
+                    vy: Math.sin(ang) * vel - 1.2,
+                    tam: 3 + Math.random() * 5,
+                    vida: 1.0
+                });
+            }
+        } else if (transcurrido >= 2200 && textoContador !== '¡JEFE VENCIDO!') {
+            for (let i = 0; i < 50; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const vel = 2 + Math.random() * 7.5;
+                particulasMuerte2.push({
+                    x: jefe2.x,
+                    y: jefe2.y,
+                    vx: Math.cos(ang) * vel,
+                    vy: Math.sin(ang) * vel,
+                    tam: 4 + Math.random() * 6,
+                    vida: 1.0
+                });
+            }
+            textoContador = '¡JEFE VENCIDO!';
+            const etiqueta = modoExtremo ? 'NIVEL 2 EXTREMO' : 'NIVEL 2';
+            document.getElementById('titulo-nivel-activo').textContent = etiqueta + ' — ¡COMPLETADO!';
+            ganarCopaJefe(2);
+        }
+
+        particulasMuerte2.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vida -= 0.025;
+        });
+        particulasMuerte2 = particulasMuerte2.filter(p => p.vida > 0);
+    }
+
+    function actualizarJefe2() {
+        if (jefe2.estadoLatigo === 'jalando') {
+            const dx = (jefe2.x + 25) - jugador.x;
+            const dy = jefe2.y - (jugador.y + jugador.tam / 2);
+            const dist = Math.hypot(dx, dy);
+            if (dist > 26) {
+                jugador.x += (dx / dist) * 22;
+                jugador.y += (dy / dist) * 22;
+                jefe2.largoLatigoActual = dist;
+            } else {
+                jefe2.estadoLatigo = 'inactivo';
+                jugador.vidas = 0;
+                actualizarCorazonesUI();
+                textoContador = 'GAME OVER';
+                document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 2 EXTREMO — ATRAPADO';
+            }
+            return;
+        }
+
+        if (!puedeMoverse || jugador.vidas <= 0 || jefe2.vida <= 0 || jefe2.muriendo) return;
+        const ahora = Date.now();
+
+        const centroJugX = jugador.x + jugador.tam / 2;
+        const centroJugY = jugador.y + jugador.tam / 2;
+
+        if (modoExtremo && ahora - jefe2.inicioCicloLatigo >= 20000) {
+            jefe2.inicioCicloLatigo = ahora;
+            jefe2.modoLatigo = !jefe2.modoLatigo;
+            jefe2.estadoLatigo = 'inactivo';
+            jefe2.largoLatigoActual = 0;
+            document.getElementById('titulo-nivel-activo').textContent = jefe2.modoLatigo
+                ? 'NIVEL 2 EXTREMO — ¡CUIDADO CON EL LÁTIGO!'
+                : 'NIVEL 2 EXTREMO — ¡FURIA ROJA!';
+        }
+
+        jefe2.x = 75;
+        const congeladoPorLatigo = jefe2.modoLatigo && (jefe2.estadoLatigo === 'apuntando' || jefe2.estadoLatigo === 'lanzando');
+        if (!congeladoPorLatigo) {
+            const objetivoY = Math.max(230, Math.min(canvas.height - 48, centroJugY));
+            const dy = objetivoY - jefe2.y;
+            if (Math.abs(dy) > 3) {
+                jefe2.y += Math.sign(dy) * Math.min(Math.abs(dy), jefe2.velocidadY);
+            }
+        }
+
+        if (Math.random() < 0.65) {
+            particulasPolvo.push({
+                x: jefe2.x - 18,
+                y: jefe2.y + 30 + (Math.random() - 0.5) * 12,
+                vx: -(4 + Math.random() * 4),
+                vy: (Math.random() - 0.5) * 1.5,
+                tam: 4 + Math.random() * 5,
+                vida: 1.0
+            });
+        }
+
+        if (modoExtremo && jefe2.modoLatigo) {
+            const origenX = jefe2.x + 18;
+            const origenY = jefe2.y - 10;
+
+            if (jefe2.estadoLatigo === 'inactivo') {
+                if (ahora - jefe2.inicioEstadoLatigo > 900) {
+                    jefe2.anguloLatigo = Math.atan2(centroJugY - origenY, centroJugX - origenX);
+                    jefe2.estadoLatigo = 'apuntando';
+                    jefe2.inicioEstadoLatigo = ahora;
+                }
+            } else if (jefe2.estadoLatigo === 'apuntando') {
+                if (ahora - jefe2.inicioEstadoLatigo >= 1000) {
+                    jefe2.estadoLatigo = 'lanzando';
+                    jefe2.inicioEstadoLatigo = ahora;
+                    jefe2.largoLatigoActual = 0;
+                }
+            } else if (jefe2.estadoLatigo === 'lanzando') {
+                jefe2.largoLatigoActual += 38;
+                const puntaX = origenX + Math.cos(jefe2.anguloLatigo) * jefe2.largoLatigoActual;
+                const puntaY = origenY + Math.sin(jefe2.anguloLatigo) * jefe2.largoLatigoActual;
+
+                const distAlJugador = Math.hypot(centroJugX - puntaX, centroJugY - puntaY);
+                if (distAlJugador <= jugador.tam * 0.65) {
+                    jefe2.estadoLatigo = 'jalando';
+                    puedeMoverse = false;
+                    return;
+                }
+
+                if (jefe2.largoLatigoActual >= jefe2.largoLatigoMax) {
+                    jefe2.estadoLatigo = 'inactivo';
+                    jefe2.inicioEstadoLatigo = ahora;
+                    jefe2.largoLatigoActual = 0;
+                }
+            }
+            return;
+        }
+
+        const anguloDisparo = Math.atan2(centroJugY - (jefe2.y - 12), centroJugX - (jefe2.x + 20));
+        const cadencia = jefe2.fase === 2 ? 1050 : 1300;
+        if (ahora - jefe2.ultimoDisparo > cadencia) {
+            jefe2.ultimoDisparo = ahora;
+
+            if (jefe2.fase === 1) {
+                balasEnemigas.push({
+                    x: jefe2.x + 26,
+                    y: jefe2.y - 12,
+                    vx: Math.cos(anguloDisparo) * 9,
+                    vy: Math.sin(anguloDisparo) * 9,
+                    radio: 5,
+                    danio: 1,
+                    esNegra: false
+                });
+            } else {
+                for (let i = 0; i < 3; i++) {
+                    const spread = (i - 1) * 0.16;
+                    balasEnemigas.push({
+                        x: jefe2.x + 26,
+                        y: jefe2.y - 12,
+                        vx: Math.cos(anguloDisparo + spread) * 9,
+                        vy: Math.sin(anguloDisparo + spread) * 9,
+                        radio: 5,
+                        danio: 1,
+                        esNegra: false
+                    });
+                }
+
+                balasEnemigas.push({
+                    x: jefe2.x + 30,
+                    y: jefe2.y - 12,
+                    vx: Math.cos(anguloDisparo) * 7.6,
+                    vy: Math.sin(anguloDisparo) * 7.6,
+                    radio: 11,
+                    danio: 2,
+                    esNegra: true
+                });
+            }
+        }
+
+        balasEnemigas = balasEnemigas.filter(b => {
+            b.x += b.vx;
+            b.y += b.vy;
+            if (Math.hypot(centroJugX - b.x, centroJugY - b.y) <= b.radio + jugador.tam * 0.45) {
+                recibirDanioNivel2(b.danio);
+                return false;
+            }
+            return b.x > -20 && b.x < canvas.width + 20 && b.y > 0 && b.y < canvas.height;
+        });
+    }
+
+    function dibujarFondoOesteDetallado() {
+        if (puedeMoverse && jugador.vidas > 0 && jefe2.vida > 0 && !jefe2.muriendo) {
+            scrollFondo += 7.5;
+        }
+
+        const gradCielo = ctx.createLinearGradient(0, 0, 0, 210);
+        gradCielo.addColorStop(0, '#c86d3b');
+        gradCielo.addColorStop(0.55, '#e89d54');
+        gradCielo.addColorStop(1, '#f4c07a');
+        ctx.fillStyle = gradCielo;
+        ctx.fillRect(0, 0, canvas.width, 210);
+
+        ctx.fillStyle = 'rgba(255, 243, 176, 0.7)';
+        ctx.beginPath();
+        ctx.arc(670, 68, 34, 0, Math.PI * 2);
+        ctx.fill();
+
+        const offsetMontanas = (scrollFondo * 0.18) % 900;
+        ctx.fillStyle = '#a85a32';
+        for (let rep = -1; rep <= 1; rep++) {
+            const base = rep * 900 - offsetMontanas;
+            ctx.beginPath();
+            ctx.moveTo(base, 210);
+            ctx.lineTo(base + 40, 125);
+            ctx.lineTo(base + 160, 125);
+            ctx.lineTo(base + 210, 175);
+            ctx.lineTo(base + 320, 175);
+            ctx.lineTo(base + 370, 105);
+            ctx.lineTo(base + 540, 105);
+            ctx.lineTo(base + 600, 165);
+            ctx.lineTo(base + 730, 130);
+            ctx.lineTo(base + 840, 130);
+            ctx.lineTo(base + 900, 210);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        const offsetPueblo = (scrollFondo * 0.75) % anchoTotalPueblo;
+        const sueloY = 210;
+
+        for (let rep = -1; rep <= 1; rep++) {
+            edificiosOeste.forEach(ed => {
+                const bx = rep * anchoTotalPueblo + ed.x - offsetPueblo;
+                const by = sueloY - ed.h;
+                if (bx + ed.w < -40 || bx > canvas.width + 40) return;
+
+                ctx.fillStyle = ed.color;
+                ctx.fillRect(bx, by, ed.w, ed.h);
+                ctx.strokeStyle = '#2b180c';
+                ctx.lineWidth = 2.5;
+                ctx.strokeRect(bx, by, ed.w, ed.h);
+
+                ctx.strokeStyle = 'rgba(35, 18, 8, 0.35)';
+                ctx.lineWidth = 1;
+                for (let ty = by + 12; ty < sueloY; ty += 12) {
+                    ctx.beginPath();
+                    ctx.moveTo(bx, ty);
+                    ctx.lineTo(bx + ed.w, ty);
+                    ctx.stroke();
+                }
+
+                ctx.fillStyle = '#3d2312';
+                if (ed.techo === 'pico') {
+                    ctx.beginPath();
+                    ctx.moveTo(bx - 6, by);
+                    ctx.lineTo(bx + ed.w / 2, by - 26);
+                    ctx.lineTo(bx + ed.w + 6, by);
+                    ctx.closePath();
+                    ctx.fill();
+                } else {
+                    ctx.fillRect(bx - 5, by - 14, ed.w + 10, 14);
+                }
+
+                const lw = ed.w * 0.68;
+                const lx = bx + (ed.w - lw) / 2;
+                const ly = by + 12;
+                ctx.fillStyle = '#d9b382';
+                ctx.fillRect(lx, ly, lw, 20);
+                ctx.strokeStyle = '#2b180c';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(lx, ly, lw, 20);
+
+                ctx.fillStyle = '#2b180c';
+                ctx.font = 'bold 11px "Courier New", monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(ed.letrero, bx + ed.w / 2, ly + 14);
+
+                if (ed.techo === 'balcon') {
+                    const balY = by + 68;
+                    ctx.fillStyle = '#3d2312';
+                    ctx.fillRect(bx - 4, balY, ed.w + 8, 6);
+                    for (let px = bx; px <= bx + ed.w; px += 12) {
+                        ctx.fillRect(px, balY - 14, 3, 14);
+                    }
+                    ctx.fillRect(bx - 4, balY - 16, ed.w + 8, 3);
+                }
+
+                const winY = ed.techo === 'balcon' ? by + 38 : by + 44;
+                [bx + 20, bx + ed.w - 44].forEach(wx => {
+                    ctx.fillStyle = '#f7c96b';
+                    ctx.fillRect(wx, winY, 24, 28);
+                    ctx.strokeStyle = '#2b180c';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(wx, winY, 24, 28);
+                    ctx.beginPath();
+                    ctx.moveTo(wx + 12, winY);
+                    ctx.lineTo(wx + 12, winY + 28);
+                    ctx.moveTo(wx, winY + 14);
+                    ctx.lineTo(wx + 24, winY + 14);
+                    ctx.stroke();
+                });
+
+                ctx.fillStyle = '#4a2c18';
+                ctx.fillRect(bx - 4, sueloY - 58, ed.w + 8, 6);
+                ctx.fillRect(bx + 6, sueloY - 58, 5, 58);
+                ctx.fillRect(bx + ed.w - 11, sueloY - 58, 5, 58);
+
+                const doorX = bx + ed.w / 2 - 16;
+                const doorY = sueloY - 46;
+                if (ed.puertasDobles) {
+                    ctx.fillStyle = '#1f1108';
+                    ctx.fillRect(doorX, doorY, 32, 46);
+                    ctx.fillStyle = '#8c583a';
+                    ctx.fillRect(doorX + 2, doorY + 10, 12, 24);
+                    ctx.fillRect(doorX + 18, doorY + 10, 12, 24);
+                } else {
+                    ctx.fillStyle = '#361d0e';
+                    ctx.fillRect(doorX + 3, doorY, 26, 46);
+                    ctx.strokeStyle = '#1f1108';
+                    ctx.strokeRect(doorX + 3, doorY, 26, 46);
+                }
+
+                const barX = bx + ed.w - 28;
+                const barY = sueloY - 22;
+                ctx.fillStyle = '#874c2b';
+                ctx.fillRect(barX, barY, 16, 22);
+                ctx.strokeStyle = '#2b180c';
+                ctx.strokeRect(barX, barY, 16, 22);
+                ctx.fillStyle = '#1c1c1c';
+                ctx.fillRect(barX, barY + 5, 16, 2);
+                ctx.fillRect(barX, barY + 15, 16, 2);
+            });
+        }
+
+        ctx.fillStyle = '#5c3a21';
+        ctx.fillRect(0, sueloY, canvas.width, 14);
+        ctx.strokeStyle = '#2b180c';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, sueloY, canvas.width, 14);
+
+        const caminoY = sueloY + 14;
+        ctx.fillStyle = '#754c29';
+        ctx.fillRect(0, caminoY, canvas.width, canvas.height - caminoY);
+
+        const offsetCamino = scrollFondo % 160;
+        ctx.strokeStyle = 'rgba(45, 25, 10, 0.45)';
+        ctx.lineWidth = 2;
+        for (let sx = -160; sx < canvas.width + 160; sx += 160) {
+            const lx = sx - offsetCamino;
+            ctx.beginPath();
+            ctx.moveTo(lx, caminoY + 35);
+            ctx.lineTo(lx + 95, caminoY + 35);
+            ctx.moveTo(lx + 40, caminoY + 95);
+            ctx.lineTo(lx + 140, caminoY + 95);
+            ctx.moveTo(lx + 15, caminoY + 165);
+            ctx.lineTo(lx + 115, caminoY + 165);
+            ctx.stroke();
+
+            ctx.fillStyle = '#4f3219';
+            ctx.fillRect(lx + 60, caminoY + 60, 8, 5);
+            ctx.fillRect(lx + 120, caminoY + 135, 10, 6);
+        }
+
+        const offsetPrimerPlano = (scrollFondo * 1.45) % 120;
+        const cercaY = canvas.height - 16;
+        ctx.fillStyle = '#4a2c18';
+        ctx.fillRect(0, cercaY + 4, canvas.width, 5);
+        for (let fx = -120; fx < canvas.width + 120; fx += 120) {
+            ctx.fillRect(fx - offsetPrimerPlano, cercaY - 6, 8, 22);
+        }
+    }
+
+    function dibujarBomba(x, y, radio, esLanzada) {
+        ctx.save();
+        if (!esLanzada) {
+            ctx.fillStyle = 'rgba(0,0,0,0.35)';
+            ctx.beginPath();
+            ctx.ellipse(x, y + radio + 3, radio * 0.9, 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.shadowColor = esLanzada ? '#ff5400' : '#FFF52D';
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = '#141414';
+        ctx.beginPath();
+        ctx.arc(x, y, radio, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = '#555555';
+        ctx.fillRect(x - 3, y - radio - 4, 6, 5);
+
+        ctx.strokeStyle = '#d9b382';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, y - radio - 4);
+        ctx.quadraticCurveTo(x + 5, y - radio - 10, x + 9, y - radio - 7);
+        ctx.stroke();
+
+        const chispa = Math.floor(Date.now() / 80) % 2 === 0 ? '#FFF52D' : '#ff3b00';
+        ctx.fillStyle = chispa;
+        ctx.beginPath();
+        ctx.arc(x + 9, y - radio - 7, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    function dibujarCorazonCamino(x, y, creadoEn) {
+        const pulso = Math.sin((Date.now() - creadoEn) / 140) * 2;
+        const r = 11 + pulso;
+        ctx.save();
+
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.beginPath();
+        ctx.ellipse(x, y + 16, 11, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.translate(x, y);
+        ctx.shadowColor = '#ff1e56';
+        ctx.shadowBlur = 18;
+        ctx.fillStyle = '#ff1e56';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+
+        ctx.beginPath();
+        ctx.moveTo(0, r * 0.85);
+        ctx.bezierCurveTo(-r * 1.3, r * 0.1, -r * 1.1, -r * 0.95, 0, -r * 0.35);
+        ctx.bezierCurveTo(r * 1.1, -r * 0.95, r * 1.3, r * 0.1, 0, r * 0.85);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    function dibujarCaballoAjedrezYJefe() {
+        const ahora = Date.now();
+        const visiblePorMuerte = !jefe2.muriendo || (ahora - jefe2.inicioMuerte < 2200);
+        if (!visiblePorMuerte) return;
+
+        const golpeado = ahora < jefe2.danioFlashHasta;
+        const esRojoIntenso = jefe2.fase === 2;
+        const galope = puedeMoverse ? Math.sin(ahora / 75) * 4 : 0;
+
+        let bx = jefe2.x;
+        let by = jefe2.y + galope;
+
+        ctx.save();
+        if (jefe2.muriendo) {
+            bx += (Math.random() - 0.5) * 12;
+            by += (Math.random() - 0.5) * 12;
+            ctx.globalAlpha = Math.max(0.15, 1 - (ahora - jefe2.inicioMuerte) / 2200);
+        }
+
+        ctx.translate(bx, by);
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.beginPath();
+        ctx.ellipse(0, 38 - galope, 32, 9, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.shadowColor = jefe2.muriendo ? '#ff1e1e' : (golpeado ? '#FFF52D' : (esRojoIntenso ? '#ff0000' : '#ffffff'));
+        ctx.shadowBlur = jefe2.muriendo ? 35 : (golpeado ? 24 : (esRojoIntenso ? 22 : 10));
+        ctx.fillStyle = jefe2.muriendo
+            ? (Math.floor(ahora / 70) % 2 === 0 ? '#ff1e1e' : '#ffccd5')
+            : (golpeado ? '#ffb703' : (esRojoIntenso ? '#d90429' : '#d8cbb8'));
+        ctx.strokeStyle = esRojoIntenso ? '#4a0000' : '#1a1a1a';
+        ctx.lineWidth = 2.5;
+
+        ctx.beginPath();
+        ctx.roundRect(-24, 24, 48, 10, 3);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.roundRect(-19, 17, 38, 8, 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(-14, 17);
+        ctx.quadraticCurveTo(-20, -2, -8, -18);
+        ctx.lineTo(-4, -27);
+        ctx.lineTo(2, -21);
+        ctx.lineTo(7, -27);
+        ctx.lineTo(11, -18);
+        ctx.lineTo(26, -8);
+        ctx.lineTo(22, 1);
+        ctx.lineTo(10, 0);
+        ctx.quadraticCurveTo(16, 9, 14, 17);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = esRojoIntenso ? '#660000' : '#2b2b2b';
+        ctx.beginPath();
+        ctx.moveTo(-14, 14);
+        ctx.quadraticCurveTo(-22, -2, -9, -17);
+        ctx.lineTo(-6, -14);
+        ctx.quadraticCurveTo(-15, -1, -10, 14);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = esRojoIntenso ? '#FFF52D' : '#111111';
+        ctx.beginPath();
+        ctx.arc(10, -13, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        const jx = -4;
+        const jy = -12;
+
+        ctx.fillStyle = golpeado ? '#ff5400' : (esRojoIntenso ? '#9b0000' : '#070707');
+        ctx.beginPath();
+        ctx.moveTo(jx - 16, jy + 2);
+        ctx.lineTo(jx + 14, jy + 2);
+        ctx.lineTo(jx + 18, jy + 24);
+        ctx.lineTo(jx - 20, jy + 24);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = esRojoIntenso ? '#ff758f' : '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.strokeStyle = esRojoIntenso ? '#ff4d6d' : '#cccccc';
+        ctx.lineWidth = 1.3;
+        for (let fx = -18; fx <= 14; fx += 6) {
+            ctx.beginPath();
+            ctx.moveTo(jx + fx, jy + 24);
+            ctx.lineTo(jx + fx - 5, jy + 31);
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = golpeado ? '#ffb703' : (esRojoIntenso ? '#b80000' : '#121212');
+        ctx.beginPath();
+        ctx.arc(jx, jy - 8, 13, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = esRojoIntenso ? '#ff758f' : '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = esRojoIntenso ? '#FFF52D' : '#ff1e1e';
+        ctx.fillRect(jx + 4, jy - 11, 4, 3);
+
+        ctx.fillStyle = esRojoIntenso ? '#780000' : '#050505';
+        ctx.beginPath();
+        ctx.ellipse(jx, jy - 19, 22, 5.5, -0.08, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = esRojoIntenso ? '#ff758f' : '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.fillRect(jx - 10, jy - 31, 20, 12);
+        ctx.strokeRect(jx - 10, jy - 31, 20, 12);
+
+        ctx.fillStyle = esRojoIntenso ? '#780000' : '#0a0a0a';
+        ctx.fillRect(jx + 8, jy - 3, 16, 6);
+        ctx.fillStyle = '#d9d9d9';
+        ctx.fillRect(jx + 22, jy - 5, 11, 4);
+        ctx.fillRect(jx + 22, jy - 2, 4, 5);
+
+        ctx.restore();
+    }
+
+    function dibujarLatigoYAviso() {
+        if (!modoExtremo || jefe2.muriendo) return;
+        const ahora = Date.now();
+        const origenX = jefe2.x + 18;
+        const origenY = jefe2.y - 10;
+
+        if (jefe2.estadoLatigo === 'apuntando') {
+            const progreso = (ahora - jefe2.inicioEstadoLatigo) / 1000;
+            const pulso = 0.30 + Math.sin(progreso * Math.PI * 14) * 0.16;
+            const anchoFranja = 42;
+
+            ctx.save();
+            ctx.translate(origenX, origenY);
+            ctx.rotate(jefe2.anguloLatigo);
+
+            ctx.fillStyle = `rgba(255, 20, 20, ${pulso})`;
+            ctx.shadowColor = '#ff1e1e';
+            ctx.shadowBlur = 18;
+            ctx.fillRect(0, -anchoFranja / 2, jefe2.largoLatigoMax, anchoFranja);
+
+            ctx.strokeStyle = 'rgba(255, 90, 90, 0.9)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, -anchoFranja / 2, jefe2.largoLatigoMax, anchoFranja);
+            ctx.restore();
+        }
+
+        if ((jefe2.estadoLatigo === 'lanzando' || jefe2.estadoLatigo === 'jalando') && jefe2.largoLatigoActual > 0) {
+            ctx.save();
+            ctx.translate(origenX, origenY);
+            ctx.rotate(jefe2.anguloLatigo);
+
+            ctx.shadowColor = '#ff1e1e';
+            ctx.shadowBlur = 14;
+            ctx.strokeStyle = '#2b1306';
+            ctx.lineWidth = 7;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            for (let lx = 0; lx <= jefe2.largoLatigoActual; lx += 16) {
+                const onda = jefe2.estadoLatigo === 'lanzando' ? Math.sin(lx * 0.05 + ahora * 0.04) * 5 : 0;
+                ctx.lineTo(lx, onda);
+            }
+            ctx.stroke();
+
+            ctx.strokeStyle = '#ff3b30';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+
+            ctx.fillStyle = '#ff1e1e';
+            ctx.beginPath();
+            ctx.arc(jefe2.largoLatigoActual, 0, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+
+    function dibujarEscenaNivel2() {
+        dibujarFondoOesteDetallado();
+
+        particulasPolvo.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vida -= 0.035;
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, p.vida * 0.6);
+            ctx.fillStyle = '#d4a373';
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.tam, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+        particulasPolvo = particulasPolvo.filter(p => p.vida > 0);
+
+        bombasCampo.forEach(b => dibujarBomba(b.x, b.y, b.radio, false));
+        corazonesCampo.forEach(c => dibujarCorazonCamino(c.x, c.y, c.creadoEn));
+
+        dibujarLatigoYAviso();
+        dibujarCaballoAjedrezYJefe();
+
+        particulasMuerte2.forEach(p => {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, p.vida);
+            ctx.shadowColor = '#ff0000';
+            ctx.shadowBlur = 18;
+            ctx.fillStyle = p.vida > 0.5 ? '#ff1e1e' : '#ff758f';
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.tam, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        bombasLanzadas.forEach(bl => dibujarBomba(bl.x, bl.y, bl.radio, true));
+
+        explosionesBomba.forEach(ex => {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, ex.vida);
+            ctx.fillStyle = '#ff9f1c';
+            ctx.shadowColor = '#ff3b00';
+            ctx.shadowBlur = 20;
+            ctx.beginPath();
+            ctx.arc(ex.x, ex.y, ex.radio, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        balasEnemigas.forEach(b => {
+            ctx.save();
+            if (b.esNegra) {
+                ctx.fillStyle = '#080808';
+                ctx.shadowColor = '#ff0000';
+                ctx.shadowBlur = 16;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.radio, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#ff1e1e';
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+            } else {
+                ctx.fillStyle = '#FFF52D';
+                ctx.shadowColor = '#ff9f1c';
+                ctx.shadowBlur = 12;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.radio, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        });
+
+        const parpadeo = Date.now() < jugador.invulnerableHasta && Math.floor(Date.now() / 100) % 2 === 0;
+        if (!parpadeo) {
+            ctx.save();
+            if (tieneBomba) {
+                ctx.strokeStyle = '#FFF52D';
+                ctx.lineWidth = 2.5;
+                ctx.shadowColor = '#FFF52D';
+                ctx.shadowBlur = 16;
+                ctx.strokeRect(jugador.x - 5, jugador.y - 5, jugador.tam + 10, jugador.tam + 10);
+            }
+            ctx.shadowColor = '#4d82bc';
+            ctx.shadowBlur = 14;
+            ctx.fillStyle = '#4d82bc';
+            ctx.fillRect(jugador.x, jugador.y, jugador.tam, jugador.tam);
+            ctx.strokeStyle = '#caf0f8';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(jugador.x, jugador.y, jugador.tam, jugador.tam);
+            ctx.restore();
+        }
+
+        const bw = 360, bx = (canvas.width - bw) / 2, by = 14;
+        ctx.save();
+        ctx.fillStyle = 'rgba(20, 20, 20, 0.85)';
+        ctx.fillRect(bx, by, bw, 16);
+        ctx.fillStyle = jefe2.fase === 2 ? '#d90429' : '#ff1e1e';
+        ctx.fillRect(bx, by, bw * (jefe2.vida / jefe2.vidaMax), 16);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(bx, by, bw, 16);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 11px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${jefe2.vida} / ${jefe2.vidaMax} HP`, canvas.width / 2, by + 12);
+        ctx.restore();
+
+        if (textoContador !== '') {
+            ctx.save();
+            ctx.font = 'bold 54px "Courier New", monospace';
+            ctx.fillStyle = textoContador === 'GAME OVER' ? '#ff1e1e' : '#FFF52D';
+            ctx.shadowColor = '#000000';
+            ctx.shadowBlur = 14;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(textoContador, canvas.width / 2, canvas.height / 2);
+            ctx.restore();
+        }
+    }
+
+    function bucleJuegoNivel2() {
+        if (!juegoActivo || nivelActual !== 2) return;
+        moverJugadorNivel2();
+        actualizarObjetosCaminoNivel2();
+        actualizarJefe2();
+        actualizarAnimacionDerrotaNivel2();
+        dibujarEscenaNivel2();
+        animacionIdNivel2 = requestAnimationFrame(bucleJuegoNivel2);
+    }
+</script>

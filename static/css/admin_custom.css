@@ -1,0 +1,130 @@
+/* 1. Barra lateral en Rosa neón oscuro (#A51E63) */
+.main-sidebar,
+.main-sidebar .brand-link,
+.sidebar-dark-primary,
+#jazzy-sidebar {
+  background-color: #A51E63 !important;
+}
+
+.nav-sidebar .nav-item > .nav-link.active {
+  background-color: rgba(255, 255, 255, 0.22) !important;
+  color: #FFFFFF !important;
+  font-weight: 600;
+}
+
+.nav-sidebar .nav-item > .nav-link:hover {
+  background-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+/* 2. Imagen de fondo continua en toda la pantalla */
+html,
+body {
+  background: url('../img/cerezos.webp') no-repeat center center fixed !important;
+  background-size: cover !important;
+}
+
+/* Contenedores principales transparentes */
+.wrapper,
+.content-wrapper,
+.content-wrapper > .content,
+.content-wrapper > .content-header,
+#content,
+#content-main {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Barra superior y footer transparentes encima del cerezo */
+#jazzy-navbar,
+#jazzy-navbar.bg-white,
+nav.main-header.navbar,
+footer.main-footer,
+footer.main-footer.bg-white {
+  background: rgba(255, 255, 255, 0.2) !important;
+  background-color: rgba(255, 255, 255, 0.2) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+  border-color: rgba(112, 43, 112, 0.35) !important;
+}
+
+/* Textos e íconos de arriba y abajo legibles */
+#jazzy-navbar .nav-link,
+#jazzy-navbar .fas,
+footer.main-footer,
+footer.main-footer a {
+  color: #1F1226 !important;
+  font-weight: 600;
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.9);
+}
+
+/* Cajas de búsqueda superiores */
+#jazzy-navbar .form-control-navbar,
+#jazzy-navbar .btn-navbar {
+  background-color: rgba(255, 255, 255, 0.7) !important;
+  border-color: #702B70 !important;
+  color: #1F1226 !important;
+}
+
+/* 3. Tarjetas transparentes con borde Morado ciruela (#702B70) intenso */
+.card,
+.module,
+.timeline > div > .timeline-item,
+.info-box,
+.small-box {
+  background: rgba(255, 255, 255, 0.45) !important;
+  background-color: rgba(255, 255, 255, 0.45) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  border: 4px solid #702B70 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22), 0 0 14px rgba(112, 43, 112, 0.85) !important;
+  transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.card:hover,
+.timeline > div > .timeline-item:hover {
+  background: rgba(255, 255, 255, 0.65) !important;
+  background-color: rgba(255, 255, 255, 0.65) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.28), 0 0 18px rgba(112, 43, 112, 1) !important;
+}
+
+.card-header,
+.card-body,
+.card-footer,
+.card table,
+.card td,
+.card th {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+.card-header {
+  border-bottom: 2px solid rgba(112, 43, 112, 0.4) !important;
+}
+
+.content-header h1,
+.content-wrapper h1,
+.content-wrapper h2,
+.content-wrapper h3 {
+  color: #1F1226 !important;
+  text-shadow: 0 1px 6px rgba(255, 255, 255, 0.95);
+  font-weight: 700;
+}
+/* Pie de página transparente encima del cerezo */
+body .wrapper footer.main-footer,
+body.sidebar-mini .wrapper footer.main-footer,
+#jazzy-footer {
+  background: rgba(255, 255, 255, 0.2) !important;
+  background-color: rgba(255, 255, 255, 0.2) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+  border-top: 1px solid rgba(112, 43, 112, 0.35) !important;
+}
+footer,
+footer[style],
+.main-footer[style],
+body > .wrapper > footer {
+  background: rgba(255, 255, 255, 0.2) !important;
+  background-color: rgba(255, 255, 255, 0.2) !important;
+}

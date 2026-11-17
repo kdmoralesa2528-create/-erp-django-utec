@@ -1,0 +1,12 @@
+Hola, {{ pedido.cliente.nombre }}!
+
+Hemos recibido y confirmado el pago de tu pedido #{{ pedido.numero_pedido }}.
+
+Detalle del pedido:
+{% for item in pedido.items_snapshot %}- {{ item.nombre }} (x{{ item.cantidad }}): ${{ item.precio }}
+{% endfor %}
+Total pagado: ${{ pedido.total_pagado }}
+Estado actual: {{ pedido.get_estado_display }}
+
+Gracias por tu compra.
+ERP Django

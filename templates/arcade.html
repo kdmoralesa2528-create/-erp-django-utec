@@ -1,0 +1,887 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<style>
+    .arcade-box { position: relative; background: #0d1b2a; border: 3px solid #d4af37; border-radius: 16px; padding: 2rem; text-align: center; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.45); max-width: 900px; margin: 2rem auto; color: #f8f9fa; }
+    .trofeos-corner { position: absolute; top: 16px; right: 20px; background: #1b263b; border: 1.5px solid #d4af37; border-radius: 10px; padding: 6px 12px; display: flex; align-items: center; gap: 6px; font-family: 'Courier New', monospace; font-size: 0.95rem; color: #d4af37; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+    .copa-slot { font-size: 1.2rem; filter: grayscale(100%) opacity(0.35); transition: all 0.3s ease; }
+    .copa-slot.ganada { filter: none; transform: scale(1.15); }
+    .arcade-title { font-family: 'Courier New', monospace; color: #d4af37; font-size: 2.3rem; font-weight: 800; letter-spacing: 3px; text-shadow: 0 0 12px rgba(212, 175, 55, 0.5); margin-bottom: 0.4rem; }
+    .arcade-screen { width: 100%; background: #1b263b; border: 2px dashed #415a77; border-radius: 12px; padding: 2rem 1.5rem; margin-top: 1.5rem; box-sizing: border-box; }
+    .niveles-grid { display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap; margin-top: 1.2rem; }
+    .btn-nivel { font-family: 'Courier New', monospace; font-weight: bold; font-size: 1.15rem; padding: 1.2rem 2rem; border-radius: 12px; border: none; cursor: pointer; color: #fff; min-width: 175px; box-shadow: 0 6px 15px rgba(0,0,0,0.35); transition: transform 0.2s, box-shadow 0.2s; }
+    .btn-nivel:hover { transform: translateY(-3px) scale(1.04); }
+    .nivel-1 { background: linear-gradient(135deg, #2ec4b6, #1b9aaa); }
+    .nivel-2 { background: linear-gradient(135deg, #ff9f1c, #e76f51); }
+    .nivel-3 { background: linear-gradient(135deg, #e63946, #9d0208); }
+    .pantalla-negra { display: none; width: 100%; background: #000; border: 2px solid #d4af37; border-radius: 12px; padding: 1rem; margin-top: 1.5rem; flex-direction: column; align-items: center; box-sizing: border-box; }
+    #juego-canvas { background: #000; display: block; margin: 0 auto; width: 100%; max-width: 100%; height: auto; border: 1px solid #222; }
+    .hud-juego { display: flex; justify-content: space-between; align-items: center; font-family: 'Courier New', monospace; font-size: 0.95rem; width: 100%; margin-top: 0.8rem; color: #adb5bd; }
+    .btn-mini { background: #1b263b; color: #f8f9fa; border: 1px solid #415a77; border-radius: 6px; padding: 0.35rem 0.85rem; cursor: pointer; font-family: 'Courier New', monospace; font-size: 0.85rem; }
+    .btn-mini:hover { border-color: #d4af37; color: #d4af37; }
+    .btn-volver { color: #adb5bd; text-decoration: none; font-size: 0.95rem; display: inline-block; margin-top: 1.5rem; }
+    .btn-volver:hover { color: #fff; }
+    .corona-negra-brillante {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        background: linear-gradient(145deg, #050505, #1b1b1b);
+        color: #ffffff;
+        border: 1.5px solid #ffffff;
+        border-radius: 20px;
+        padding: 3px 10px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.78rem;
+        font-weight: bold;
+        letter-spacing: 0.5px;
+        box-shadow: 0 0 12px rgba(255, 255, 255, 0.85), inset 0 0 8px rgba(255, 255, 255, 0.25);
+        text-shadow: 0 0 8px #ffffff;
+    }
+    .corona-negra-icono {
+        filter: brightness(0) invert(0) drop-shadow(0 0 2px #ffffff) drop-shadow(0 0 6px #ffffff);
+        font-size: 0.95rem;
+    }
+</style>
+
+<div class="arcade-box">
+    <div class="trofeos-corner" title="Copas obtenidas al vencer jefes">
+        <span id="copa-1" class="copa-slot">🏆</span>
+        <span id="copa-2" class="copa-slot">🏆</span>
+        <span id="copa-3" class="copa-slot">🏆</span>
+        <span id="contador-copas" style="margin-left: 4px;">0/3</span>
+    </div>
+
+    <div style="font-size: 2.8rem; margin-bottom: 0.5rem;">🕹️</div>
+    <h1 class="arcade-title">ERP ARCADE MODE</h1>
+    <p style="color: #adb5bd; font-size: 1rem;">¡Desbloqueaste la sala secreta del sistema!</p>
+
+    <div class="arcade-screen" id="menu-niveles">
+        <h4 style="color: #e0e1dd; margin-bottom: 0.5rem;">SELECCIONA UN NIVEL</h4>
+        <p style="color: #778da9; font-size: 0.95rem; margin-bottom: 1.5rem;">Derrota al jefe de cada nivel para ganar su trofeo</p>
+        <div class="niveles-grid" style="align-items: center;">
+            <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+                <span id="badge-extremo-1" class="corona-negra-brillante" style="visibility:hidden;">
+                    <span class="corona-negra-icono">👑</span> EXTREMO VENCIDO
+                </span>
+                <button id="btn-extremo-1" onclick="abrirNivel(1, true)" style="display:none; background:#050505; color:#ffffff; border:2px solid #ffffff; box-shadow:0 0 14px rgba(255,255,255,0.75); padding:8px 14px; border-radius:8px; font-family:'Courier New',monospace; font-weight:bold; font-size:0.85rem; cursor:pointer;">
+                    💀 NIVEL 1 EXTREMO
+                </button>
+                <button class="btn-nivel nivel-1" onclick="abrirNivel(1, false)">🟢 NIVEL 1</button>
+                <span id="badge-nivel-1" style="visibility:hidden; color:#FFF52D; font-family:'Courier New',monospace; font-size:0.85rem; font-weight:bold; text-shadow:0 0 8px #FFF52D;">👑 COMPLETADO</span>
+            </div>
+
+            <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+                <span id="badge-extremo-2" class="corona-negra-brillante" style="visibility:hidden;">
+                    <span class="corona-negra-icono">👑</span> EXTREMO VENCIDO
+                </span>
+                <button id="btn-extremo-2" onclick="abrirNivel(2, true)" style="display:none; background:#1a0000; color:#ffffff; border:2px solid #ff1e1e; box-shadow:0 0 14px rgba(255,30,30,0.85); padding:8px 14px; border-radius:8px; font-family:'Courier New',monospace; font-weight:bold; font-size:0.85rem; cursor:pointer;">
+                    💀 NIVEL 2 EXTREMO
+                </button>
+                <button class="btn-nivel nivel-2" onclick="abrirNivel(2, false)">🟠 NIVEL 2</button>
+                <span id="badge-nivel-2" style="visibility:hidden; color:#FFF52D; font-family:'Courier New',monospace; font-size:0.85rem; font-weight:bold; text-shadow:0 0 8px #FFF52D;">👑 COMPLETADO</span>
+            </div>
+
+            <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+                <span style="visibility:hidden; font-size:0.8rem;">-</span>
+                <button class="btn-nivel nivel-3" onclick="abrirNivel(3, false)">🔴 NIVEL 3</button>
+                <span id="badge-nivel-3" style="visibility:hidden; color:#FFF52D; font-family:'Courier New',monospace; font-size:0.85rem; font-weight:bold; text-shadow:0 0 8px #FFF52D;">👑 COMPLETADO</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="pantalla-negra" id="pantalla-juego">
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 0.6rem; font-family: 'Courier New', monospace;">
+            <span id="titulo-nivel-activo" style="color: #d4af37; font-weight: bold;">NIVEL 1</span>
+            <button class="btn-mini" onclick="volverAlMenu()">✕ Salir</button>
+        </div>
+        <canvas id="juego-canvas" width="800" height="440"></canvas>
+        <div class="hud-juego">
+            <span id="corazones-jugador" style="font-size: 1.35rem; letter-spacing: 3px;">❤️❤️❤️</span>
+            <span id="cargas-energia" style="color: #00e5ff; font-weight: bold;">⚡ Energía: 0/3</span>
+            <span>Junta 3 esferas + ESPACIO</span>
+        </div>
+    </div>
+
+    <a href="/" class="btn-volver">← Volver al ERP</a>
+</div>
+
+
+
+<script>
+    const canvas = document.getElementById('juego-canvas');
+    const ctx = canvas.getContext('2d');
+// Parche global de rendimiento (60 FPS fluidos en Nivel 1, 2, 3 y 4)
+    Object.defineProperty(ctx, 'shadowBlur', {
+        get() { return 0; },
+        set() { /* Desactivado para mantener 60 FPS estables */ }
+    });
+    let juegoActivo = false;
+    let puedeMoverse = false;
+    let nivelActual = 1;
+    let modoExtremo = false;
+    let textoContador = '';
+    let intervaloContador = null;
+    let animacionId = null;
+
+    const copasGanadas = JSON.parse(localStorage.getItem('erp_arcade_copas') || '{}');
+    const extremosGanados = JSON.parse(localStorage.getItem('erp_arcade_extremos') || '{}');
+
+    function actualizarTrofeosUI() {
+        let total = 0;
+        for (let i = 1; i <= 3; i++) {
+            const el = document.getElementById('copa-' + i);
+            const badge = document.getElementById('badge-nivel-' + i);
+            if (copasGanadas[i]) {
+                if (el) el.classList.add('ganada');
+                if (badge) badge.style.visibility = 'visible';
+                total++;
+            } else {
+                if (el) el.classList.remove('ganada');
+                if (badge) badge.style.visibility = 'hidden';
+            }
+        }
+        const contadorEl = document.getElementById('contador-copas');
+        if (contadorEl) contadorEl.textContent = total + '/3';
+
+        const btnExtremo1 = document.getElementById('btn-extremo-1');
+        const badgeExtremo1 = document.getElementById('badge-extremo-1');
+        if (btnExtremo1) btnExtremo1.style.display = copasGanadas[1] ? 'inline-block' : 'none';
+        if (badgeExtremo1) badgeExtremo1.style.visibility = extremosGanados[1] ? 'visible' : 'hidden';
+
+        const btnExtremo2 = document.getElementById('btn-extremo-2');
+        const badgeExtremo2 = document.getElementById('badge-extremo-2');
+        if (btnExtremo2) btnExtremo2.style.display = copasGanadas[2] ? 'inline-block' : 'none';
+        if (badgeExtremo2) badgeExtremo2.style.visibility = extremosGanados[2] ? 'visible' : 'hidden';
+    }
+
+    function ganarCopaJefe(nivel) {
+        if (modoExtremo) {
+            extremosGanados[nivel] = true;
+            localStorage.setItem('erp_arcade_extremos', JSON.stringify(extremosGanados));
+        } else {
+            copasGanadas[nivel] = true;
+            localStorage.setItem('erp_arcade_copas', JSON.stringify(copasGanadas));
+        }
+        actualizarTrofeosUI();
+    }
+
+    const jugador = {
+        x: 382, y: 360, tam: 36, vel: 5.5,
+        vidas: 3, vidasMax: 3, invulnerableHasta: 0, esferas: 0
+    };
+
+    const jefe = {
+        x: 366, y: 55, tam: 68, velX: 4.5, direccion: 1,
+        vidaMax: 100, vida: 100, danioFlashHasta: 0,
+        modoFurioso: false,
+        lanzaMejorada: false,
+        muriendo: false, inicioMuerte: 0,
+        patronActual: 1,
+        estado: 'espera',
+        ultimoCambioEstado: 0, ultimoDisparo: 0, ultimoSpawnEsfera: 0,
+        lanzasDisparadas: 0, tiempoEntreLanzas: 520,
+        totalLanzasFase: 6, tiempoAvisoCaida: 950,
+        esquinaX: 35,
+        esquinaLado: 0,
+        embestidaFase: 'ninguna',
+        embestidaInicio: 0,
+        embestidaStartX: 0,
+        embestidaStartY: 0,
+        embestidaTargetX: 0,
+        embestidaTargetY: 0,
+        embestidaVx: 0,
+        embestidaVy: 0,
+        origenX: 366,
+        origenY: 55
+    };
+
+    let lanzasAlCielo = [];
+    let zonasImpacto = [];
+    let esferasCampo = [];
+    let disparosJugador = [];
+    let particulasMuerte = [];
+
+    const teclas = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
+
+    window.addEventListener('keydown', e => {
+        if (e.key in teclas) { e.preventDefault(); teclas[e.key] = true; }
+        if (e.code === 'Space' && juegoActivo && nivelActual === 1) {
+            e.preventDefault();
+            dispararRayoJugador();
+        }
+    });
+    window.addEventListener('keyup', e => {
+        if (e.key in teclas) teclas[e.key] = false;
+    });
+
+    function actualizarCorazonesUI() {
+        let html = '';
+        for (let i = 0; i < jugador.vidasMax; i++) {
+            html += i < jugador.vidas ? '❤️' : '🖤';
+        }
+        document.getElementById('corazones-jugador').innerHTML = html;
+    }
+
+    function actualizarEnergiaUI() {
+        const el = document.getElementById('cargas-energia');
+        if (jugador.esferas >= 3) {
+            el.textContent = '⚡ Energía: 3/3 [¡LISTA - ESPACIO!]';
+            el.style.color = '#FFF52D';
+        } else {
+            el.textContent = `⚡ Energía: ${jugador.esferas}/3`;
+            el.style.color = '#00e5ff';
+        }
+    }
+
+    function dispararRayoJugador() {
+        if (!puedeMoverse || jugador.vidas <= 0 || jefe.vida <= 0 || jefe.muriendo) return;
+        if (jugador.esferas < 3) return;
+        jugador.esferas = 0;
+        actualizarEnergiaUI();
+
+        const tamRayo = 44;
+        disparosJugador.push({
+            x: jugador.x + jugador.tam / 2 - tamRayo / 2,
+            y: jugador.y + jugador.tam / 2 - tamRayo / 2,
+            ancho: tamRayo,
+            alto: tamRayo,
+            vel: 11
+        });
+    }
+
+    function recibirDanioJugador() {
+        const ahora = Date.now();
+        if (ahora < jugador.invulnerableHasta || jugador.vidas <= 0 || jefe.vida <= 0 || jefe.muriendo) return;
+        jugador.vidas--;
+        jugador.invulnerableHasta = ahora + 1200;
+        actualizarCorazonesUI();
+
+        if (jugador.vidas <= 0) {
+            puedeMoverse = false;
+            textoContador = 'GAME OVER';
+            const etiqueta = modoExtremo ? 'NIVEL 1 EXTREMO' : 'NIVEL 1';
+            document.getElementById('titulo-nivel-activo').textContent = etiqueta + ' — DERROTADO';
+        }
+    }
+
+    function moverJugador() {
+        if (!puedeMoverse) return;
+        if (teclas.ArrowUp) jugador.y -= jugador.vel;
+        if (teclas.ArrowDown) jugador.y += jugador.vel;
+        if (teclas.ArrowLeft) jugador.x -= jugador.vel;
+        if (teclas.ArrowRight) jugador.x += jugador.vel;
+
+        if (jugador.x < 10) jugador.x = 10;
+        if (jugador.y < 10) jugador.y = 10;
+        if (jugador.x + jugador.tam > canvas.width - 10) jugador.x = canvas.width - 10 - jugador.tam;
+        if (jugador.y + jugador.tam > canvas.height - 10) jugador.y = canvas.height - 10 - jugador.tam;
+    }
+
+    function actualizarEsferasYDisparos() {
+        if (!puedeMoverse || jugador.vidas <= 0 || jefe.vida <= 0 || jefe.muriendo) return;
+        const ahora = Date.now();
+
+        if (esferasCampo.length < 2 && ahora - jefe.ultimoSpawnEsfera >= 2500) {
+            jefe.ultimoSpawnEsfera = ahora;
+            const margen = 45;
+            const minY = 160;
+            const maxY = canvas.height - margen;
+            esferasCampo.push({
+                x: Math.random() * (canvas.width - margen * 2) + margen,
+                y: Math.random() * (maxY - minY) + minY,
+                radio: 11,
+                creadaEn: ahora
+            });
+        }
+
+        const centroJugX = jugador.x + jugador.tam / 2;
+        const centroJugY = jugador.y + jugador.tam / 2;
+        esferasCampo = esferasCampo.filter(esp => {
+            const dist = Math.hypot(centroJugX - esp.x, centroJugY - esp.y);
+            if (dist <= esp.radio + jugador.tam * 0.55) {
+                if (jugador.esferas < 3) {
+                    jugador.esferas++;
+                    actualizarEnergiaUI();
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        disparosJugador = disparosJugador.filter(d => {
+            const centroJefeX = jefe.x + jefe.tam / 2;
+            const centroJefeY = jefe.y + jefe.tam / 2;
+            const centroDisparoX = d.x + d.ancho / 2;
+            const centroDisparoY = d.y + d.alto / 2;
+            const ang = Math.atan2(centroJefeY - centroDisparoY, centroJefeX - centroDisparoX);
+
+            d.x += Math.cos(ang) * d.vel;
+            d.y += Math.sin(ang) * d.vel;
+
+            const tocaJefe = d.x < jefe.x + jefe.tam &&
+                             d.x + d.ancho > jefe.x &&
+                             d.y < jefe.y + jefe.tam &&
+                             d.y + d.alto > jefe.y;
+            if (tocaJefe) {
+                jefe.vida = Math.max(0, jefe.vida - 10);
+                jefe.danioFlashHasta = ahora + 160;
+                if (!modoExtremo && jefe.vida <= 50 && !jefe.modoFurioso) {
+                    jefe.modoFurioso = true;
+                    jefe.lanzaMejorada = true;
+                    document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 1 — ¡LANZA MEJORADA!';
+                }
+                if (jefe.vida <= 0 && !jefe.muriendo) {
+                    jefe.muriendo = true;
+                    jefe.inicioMuerte = ahora;
+                    puedeMoverse = false;
+                    lanzasAlCielo = [];
+                    zonasImpacto = [];
+                    esferasCampo = [];
+                }
+                return false;
+            }
+            return true;
+        });
+    }
+
+    function actualizarAnimacionDerrota() {
+        if (!jefe.muriendo) return;
+        const ahora = Date.now();
+        const transcurrido = ahora - jefe.inicioMuerte;
+
+        if (transcurrido < 2200) {
+            for (let i = 0; i < 3; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const vel = 1.5 + Math.random() * 4;
+                particulasMuerte.push({
+                    x: jefe.x + jefe.tam / 2 + (Math.random() - 0.5) * jefe.tam,
+                    y: jefe.y + jefe.tam / 2 + (Math.random() - 0.5) * jefe.tam,
+                    vx: Math.cos(ang) * vel,
+                    vy: Math.sin(ang) * vel - 1.2,
+                    tam: 3 + Math.random() * 4,
+                    vida: 1.0
+                });
+            }
+        } else if (transcurrido >= 2200 && textoContador !== '¡JEFE VENCIDO!') {
+            for (let i = 0; i < 45; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const vel = 2 + Math.random() * 7;
+                particulasMuerte.push({
+                    x: jefe.x + jefe.tam / 2,
+                    y: jefe.y + jefe.tam / 2,
+                    vx: Math.cos(ang) * vel,
+                    vy: Math.sin(ang) * vel,
+                    tam: 4 + Math.random() * 5,
+                    vida: 1.0
+                });
+            }
+            textoContador = '¡JEFE VENCIDO!';
+            const etiqueta = modoExtremo ? 'NIVEL 1 EXTREMO' : 'NIVEL 1';
+            document.getElementById('titulo-nivel-activo').textContent = etiqueta + ' — ¡COMPLETADO!';
+            ganarCopaJefe(1);
+        }
+
+        particulasMuerte.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vida -= 0.025;
+        });
+        particulasMuerte = particulasMuerte.filter(p => p.vida > 0);
+    }
+
+
+    function actualizarJefe() {
+        if (!puedeMoverse || jugador.vidas <= 0 || jefe.vida <= 0 || jefe.muriendo) return;
+        const ahora = Date.now();
+
+        jefe.velX = jefe.modoFurioso ? 6.2 : 4.5;
+        jefe.tiempoEntreLanzas = jefe.lanzaMejorada ? 360 : 520;
+        jefe.tiempoAvisoCaida = jefe.lanzaMejorada ? 700 : 950;
+
+        const margenHitbox = (jefe.estado === 'embestida' && jefe.embestidaFase === 'cargando' && modoExtremo) ? 18 : 0;
+        const tocaCuerpo = jugador.x < jefe.x + jefe.tam + margenHitbox &&
+                           jugador.x + jugador.tam > jefe.x - margenHitbox &&
+                           jugador.y < jefe.y + jefe.tam + margenHitbox &&
+                           jugador.y + jugador.tam > jefe.y - margenHitbox;
+        if (tocaCuerpo) {
+            recibirDanioJugador();
+        }
+
+        if (jefe.ultimoCambioEstado === 0) {
+            jefe.ultimoCambioEstado = ahora;
+            jefe.patronActual = 1;
+            jefe.esquinaLado = 0;
+            jefe.esquinaX = 35;
+            jefe.estado = 'yendo_esquina';
+        }
+
+        if (ahora - jefe.ultimoCambioEstado >= 20000) {
+            jefe.ultimoCambioEstado = ahora;
+            jefe.patronActual = (jefe.patronActual % 3) + 1;
+            jefe.ultimoDisparo = 0;
+
+            if (jefe.patronActual === 1 || jefe.patronActual === 2) {
+                jefe.esquinaLado = (jefe.esquinaLado === 0) ? 1 : 0;
+                jefe.esquinaX = (jefe.esquinaLado === 0) ? 35 : (canvas.width - jefe.tam - 35);
+                jefe.estado = 'yendo_esquina';
+            } else if (jefe.patronActual === 3) {
+                jefe.estado = 'embestida';
+                jefe.embestidaFase = 'apuntando';
+                jefe.embestidaInicio = ahora;
+                jefe.origenX = jefe.x;
+                jefe.origenY = jefe.y;
+                jefe.embestidaStartX = jefe.x + jefe.tam / 2;
+                jefe.embestidaStartY = jefe.y + jefe.tam / 2;
+                jefe.embestidaTargetX = jugador.x + jugador.tam / 2;
+                jefe.embestidaTargetY = jugador.y + jugador.tam / 2;
+            }
+        }
+
+        if (jefe.estado === 'yendo_esquina') {
+            const dx = jefe.esquinaX - jefe.x;
+            const dy = 55 - jefe.y;
+            if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+                jefe.x += Math.sign(dx) * Math.min(9, Math.abs(dx));
+                jefe.y += Math.sign(dy) * Math.min(9, Math.abs(dy));
+            } else {
+                jefe.x = jefe.esquinaX;
+                jefe.y = 55;
+                jefe.estado = 'disparando';
+            }
+        } else if (jefe.estado === 'disparando') {
+            if (ahora - jefe.ultimoDisparo >= jefe.tiempoEntreLanzas) {
+                jefe.ultimoDisparo = ahora;
+
+                lanzasAlCielo.push({ x: jefe.x + jefe.tam / 2, y: jefe.y - 10, velY: -15 });
+
+                const margen = 45;
+                let objX, objY;
+                if (jefe.patronActual === 1) {
+                    objX = Math.random() * (canvas.width - margen * 2) + margen;
+                    objY = Math.random() * (canvas.height - 190) + 150;
+                } else {
+                    const disp = jefe.lanzaMejorada ? 80 : 120;
+                    objX = jugador.x + jugador.tam / 2 + (Math.random() - 0.5) * disp;
+                    objY = jugador.y + jugador.tam / 2 + (Math.random() - 0.5) * disp;
+                    objX = Math.max(margen, Math.min(canvas.width - margen, objX));
+                    objY = Math.max(150, Math.min(canvas.height - margen, objY));
+                }
+
+                zonasImpacto.push({
+                    x: objX, y: objY, radioMax: jefe.lanzaMejorada ? 36 : 30,
+                    creadaEn: ahora, tiempoAviso: jefe.tiempoAvisoCaida,
+                    impactada: false, impactoEn: 0
+                });
+            }
+        } else if (jefe.estado === 'embestida') {
+            if (jefe.embestidaFase === 'apuntando') {
+                jefe.embestidaStartX = jefe.x + jefe.tam / 2;
+                jefe.embestidaStartY = jefe.y + jefe.tam / 2;
+                jefe.embestidaTargetX = jugador.x + jugador.tam / 2;
+                jefe.embestidaTargetY = jugador.y + jugador.tam / 2;
+
+                const tiempoPrep = modoExtremo ? 650 : 750;
+                if (ahora - jefe.embestidaInicio >= tiempoPrep) {
+                    const ang = Math.atan2(
+                        jefe.embestidaTargetY - jefe.embestidaStartY,
+                        jefe.embestidaTargetX - jefe.embestidaStartX
+                    );
+                    const velCarga = modoExtremo ? 16 : 12.5;
+                    jefe.embestidaVx = Math.cos(ang) * velCarga;
+                    jefe.embestidaVy = Math.sin(ang) * velCarga;
+                    jefe.embestidaFase = 'cargando';
+                }
+            } else if (jefe.embestidaFase === 'cargando') {
+                jefe.x += jefe.embestidaVx;
+                jefe.y += jefe.embestidaVy;
+
+                if (jefe.x <= 15 || jefe.x + jefe.tam >= canvas.width - 15 ||
+                    jefe.y <= 15 || jefe.y + jefe.tam >= canvas.height - 15) {
+                    jefe.x = Math.max(15, Math.min(canvas.width - 15 - jefe.tam, jefe.x));
+                    jefe.y = Math.max(15, Math.min(canvas.height - 15 - jefe.tam, jefe.y));
+                    jefe.embestidaFase = 'volviendo';
+                }
+            } else if (jefe.embestidaFase === 'volviendo') {
+                const dx = jefe.origenX - jefe.x;
+                const dy = jefe.origenY - jefe.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 10) {
+                    jefe.x += (dx / dist) * 10;
+                    jefe.y += (dy / dist) * 10;
+                } else {
+                    jefe.x = jefe.origenX;
+                    jefe.y = jefe.origenY;
+                    jefe.embestidaFase = 'apuntando';
+                    jefe.embestidaInicio = ahora;
+                }
+            }
+        }
+
+        lanzasAlCielo.forEach(l => l.y += l.velY);
+        lanzasAlCielo = lanzasAlCielo.filter(l => l.y > -60);
+
+        zonasImpacto.forEach(z => {
+            const transcurrido = ahora - z.creadaEn;
+            if (!z.impactada && transcurrido >= z.tiempoAviso) {
+                z.impactada = true;
+                z.impactoEn = ahora;
+                const dist = Math.hypot((jugador.x + jugador.tam / 2) - z.x, (jugador.y + jugador.tam / 2) - z.y);
+                if (dist <= z.radioMax + jugador.tam * 0.35) {
+                    recibirDanioJugador();
+                }
+            }
+        });
+        zonasImpacto = zonasImpacto.filter(z => !z.impactada || (ahora - z.impactoEn < 220));
+    }
+
+    function dibujarLanza(x, y, haciaAbajo) {
+        ctx.save();
+        ctx.translate(x, y);
+        if (haciaAbajo) ctx.rotate(Math.PI);
+
+        const mejorada = jefe.lanzaMejorada;
+        const colorPrincipal = '#ff1e1e';
+        const colorBrillo = '#ff0000';
+
+        ctx.shadowColor = colorBrillo;
+        ctx.shadowBlur = mejorada ? 22 : 14;
+        ctx.strokeStyle = colorPrincipal;
+        ctx.fillStyle = colorPrincipal;
+
+        if (!mejorada) {
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(0, 22);
+            ctx.lineTo(0, -18);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(0, -30);
+            ctx.lineTo(-8, -14);
+            ctx.lineTo(8, -14);
+            ctx.closePath();
+            ctx.fill();
+        } else {
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(0, 34);
+            ctx.lineTo(0, -30);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(0, -44);
+            ctx.lineTo(-14, -20);
+            ctx.lineTo(0, -25);
+            ctx.lineTo(14, -20);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.lineWidth = 3.5;
+            [-8, 6, 18].forEach(py => {
+                ctx.beginPath();
+                ctx.moveTo(-11, py + 7);
+                ctx.lineTo(0, py);
+                ctx.lineTo(11, py + 7);
+                ctx.stroke();
+            });
+        }
+        ctx.restore();
+    }
+
+    function dibujarEscena() {
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const ahora = Date.now();
+        const colorAtaque = '#ff1e1e';
+        const rgbAtaque = '255, 30, 30';
+
+        esferasCampo.forEach(esp => {
+            const pulso = Math.sin((ahora - esp.creadaEn) / 140) * 2.5;
+            ctx.save();
+            ctx.shadowColor = '#00e5ff';
+            ctx.shadowBlur = 18;
+            ctx.fillStyle = '#00e5ff';
+            ctx.beginPath();
+            ctx.arc(esp.x, esp.y, esp.radio + pulso, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(esp.x, esp.y, (esp.radio + pulso) * 0.45, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        if (jefe.estado === 'embestida' && (jefe.embestidaFase === 'apuntando' || jefe.embestidaFase === 'cargando')) {
+            const sx = jefe.embestidaStartX;
+            const sy = jefe.embestidaStartY;
+            const ang = Math.atan2(jefe.embestidaTargetY - sy, jefe.embestidaTargetX - sx);
+            const ex = sx + Math.cos(ang) * 1000;
+            const ey = sy + Math.sin(ang) * 1000;
+            const anchoFranja = modoExtremo ? (jefe.tam + 36) : jefe.tam;
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 30, 30, 0.25)';
+            ctx.lineWidth = anchoFranja;
+            ctx.lineCap = 'butt';
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(ex, ey);
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(255, 30, 30, 0.85)';
+            ctx.lineWidth = 2.5;
+            const perpX = -Math.sin(ang) * (anchoFranja / 2);
+            const perpY = Math.cos(ang) * (anchoFranja / 2);
+            ctx.beginPath();
+            ctx.moveTo(sx + perpX, sy + perpY);
+            ctx.lineTo(ex + perpX, ey + perpY);
+            ctx.moveTo(sx - perpX, sy - perpY);
+            ctx.lineTo(ex - perpX, ey - perpY);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        zonasImpacto.forEach(z => {
+            ctx.save();
+            if (!z.impactada) {
+                const progreso = Math.min(1, (ahora - z.creadaEn) / z.tiempoAviso);
+                ctx.beginPath();
+                ctx.arc(z.x, z.y, z.radioMax, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(${rgbAtaque}, ${0.12 + progreso * 0.25})`;
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = `rgba(${rgbAtaque}, 0.85)`;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.arc(z.x, z.y, z.radioMax * progreso, 0, Math.PI * 2);
+                ctx.strokeStyle = colorAtaque;
+                ctx.stroke();
+            } else {
+                ctx.beginPath();
+                ctx.arc(z.x, z.y, z.radioMax * 1.15, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(${rgbAtaque}, 0.85)`;
+                ctx.shadowColor = colorAtaque;
+                ctx.shadowBlur = 22;
+                ctx.fill();
+                dibujarLanza(z.x, z.y - 10, true);
+            }
+            ctx.restore();
+        });
+
+        disparosJugador.forEach(d => {
+            const cx = d.x + d.ancho / 2;
+            const cy = d.y + d.alto / 2;
+            const radio = d.ancho / 2;
+            ctx.save();
+            ctx.shadowColor = '#00e5ff';
+            ctx.shadowBlur = 26;
+            ctx.fillStyle = '#00e5ff';
+            ctx.beginPath();
+            ctx.arc(cx, cy, radio, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(cx, cy, radio * 0.55, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        lanzasAlCielo.forEach(l => dibujarLanza(l.x, l.y, false));
+
+        const visiblePorMuerte = !jefe.muriendo || (ahora - jefe.inicioMuerte < 2200);
+        if (visiblePorMuerte) {
+            ctx.save();
+            const golpeado = ahora < jefe.danioFlashHasta;
+            let jx = jefe.x;
+            let jy = jefe.y;
+
+            if (jefe.muriendo || (jefe.estado === 'embestida' && jefe.embestidaFase === 'apuntando')) {
+                jx += (Math.random() - 0.5) * 10;
+                jy += (Math.random() - 0.5) * 10;
+            }
+            if (jefe.muriendo) {
+                ctx.globalAlpha = Math.max(0.15, 1 - (ahora - jefe.inicioMuerte) / 2200);
+            }
+
+            if (jefe.muriendo) {
+                ctx.shadowColor = '#ff1e1e';
+                ctx.shadowBlur = 35;
+                ctx.fillStyle = Math.floor(ahora / 70) % 2 === 0 ? '#ff1e1e' : '#ffffff';
+                ctx.fillRect(jx, jy, jefe.tam, jefe.tam);
+            } else if (golpeado) {
+                ctx.shadowColor = '#00e5ff';
+                ctx.shadowBlur = 28;
+                ctx.fillStyle = '#00e5ff';
+                ctx.fillRect(jx, jy, jefe.tam, jefe.tam);
+            } else if (modoExtremo) {
+                ctx.shadowColor = '#ff1e1e';
+                ctx.shadowBlur = 28;
+                ctx.fillStyle = '#080808';
+                ctx.fillRect(jx, jy, jefe.tam, jefe.tam);
+                ctx.strokeStyle = '#ff1e1e';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(jx, jy, jefe.tam, jefe.tam);
+            } else {
+                ctx.shadowColor = jefe.modoFurioso ? '#ff1e1e' : '#ffffff';
+                ctx.shadowBlur = jefe.modoFurioso ? 26 : 20;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(jx, jy, jefe.tam, jefe.tam);
+            }
+            ctx.restore();
+        }
+
+        particulasMuerte.forEach(p => {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, p.vida);
+            ctx.shadowColor = '#ff1e1e';
+            ctx.shadowBlur = 16;
+            ctx.fillStyle = p.vida > 0.5 ? '#ff1e1e' : '#FFF52D';
+            ctx.fillRect(p.x - p.tam / 2, p.y - p.tam / 2, p.tam, p.tam);
+            ctx.restore();
+        });
+
+        dibujarLanza(jefe.x + jefe.tam + 22, jefe.y + jefe.tam / 2, true);
+
+        const barW = 360, barH = 14;
+        const barX = (canvas.width - barW) / 2, barY = 14;
+        const pctVida = jefe.vida / jefe.vidaMax;
+        ctx.save();
+        ctx.fillStyle = 'rgba(20, 20, 20, 0.85)';
+        ctx.fillRect(barX, barY, barW, barH);
+        ctx.fillStyle = '#ff1e1e';
+        ctx.shadowColor = '#ff0000';
+        ctx.shadowBlur = 10;
+        ctx.fillRect(barX, barY, barW * pctVida, barH);
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(barX, barY, barW, barH);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 11px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${jefe.vida} / ${jefe.vidaMax} HP`, canvas.width / 2, barY + 11);
+        ctx.restore();
+
+        const parpadeo = ahora < jugador.invulnerableHasta && Math.floor(ahora / 100) % 2 === 0;
+        if (!parpadeo) {
+            ctx.save();
+            ctx.shadowColor = '#4d82bc';
+            ctx.shadowBlur = 14;
+            ctx.fillStyle = '#4d82bc';
+            ctx.fillRect(jugador.x, jugador.y, jugador.tam, jugador.tam);
+            ctx.restore();
+        }
+
+        if (textoContador !== '') {
+            ctx.save();
+            ctx.font = 'bold 54px "Courier New", monospace';
+            ctx.fillStyle = textoContador === 'GAME OVER' ? '#ff1e1e' : '#FFF52D';
+            ctx.shadowColor = textoContador === 'GAME OVER' ? '#ff0000' : '#d4af37';
+            ctx.shadowBlur = 20;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(textoContador, canvas.width / 2, canvas.height / 2);
+            ctx.restore();
+        }
+    }
+
+    function bucleJuego() {
+        if (!juegoActivo) return;
+        moverJugador();
+        actualizarEsferasYDisparos();
+        actualizarJefe();
+        actualizarAnimacionDerrota();
+        dibujarEscena();
+        animacionId = requestAnimationFrame(bucleJuego);
+    }
+
+    function iniciarCuentaRegresiva() {
+        clearInterval(intervaloContador);
+        puedeMoverse = false;
+        let cuenta = 3;
+        textoContador = String(cuenta);
+
+        intervaloContador = setInterval(() => {
+            cuenta--;
+            if (cuenta > 0) {
+                textoContador = String(cuenta);
+            } else if (cuenta === 0) {
+                textoContador = '¡YA!';
+                puedeMoverse = true;
+                const etiqueta = modoExtremo ? 'NIVEL ' + nivelActual + ' EXTREMO' : 'NIVEL ' + nivelActual;
+                document.getElementById('titulo-nivel-activo').textContent = etiqueta + ' — ¡EN CURSO!';
+            } else {
+                textoContador = '';
+                clearInterval(intervaloContador);
+            }
+        }, 1000);
+    }
+
+    function abrirNivel(nivel, extremo = false) {
+        nivelActual = nivel;
+        modoExtremo = extremo;
+        document.getElementById('menu-niveles').style.display = 'none';
+        document.getElementById('pantalla-juego').style.display = 'flex';
+        const etiqueta = modoExtremo ? 'NIVEL ' + nivel + ' EXTREMO' : 'NIVEL ' + nivel;
+        document.getElementById('titulo-nivel-activo').textContent = etiqueta + ' — PREPÁRATE...';
+
+        jugador.x = (canvas.width / 2) - (jugador.tam / 2);
+        jugador.y = canvas.height - 80;
+        jugador.vidasMax = (modoExtremo && nivel === 1) ? 1 : 3;
+        jugador.vidas = jugador.vidasMax;
+        jugador.invulnerableHasta = 0;
+        jugador.esferas = 0;
+        actualizarCorazonesUI();
+        actualizarEnergiaUI();
+
+        jefe.x = (canvas.width / 2) - (jefe.tam / 2);
+        jefe.y = 55;
+        jefe.vidaMax = modoExtremo ? 200 : 100;
+        jefe.vida = jefe.vidaMax;
+        jefe.modoFurioso = modoExtremo ? true : false;
+        jefe.lanzaMejorada = modoExtremo ? true : false;
+        jefe.muriendo = false;
+        jefe.danioFlashHasta = 0;
+        jefe.patronActual = 1;
+        jefe.estado = 'espera';
+        jefe.ultimoCambioEstado = 0;
+        jefe.embestidaFase = 'ninguna';
+        lanzasAlCielo = [];
+        zonasImpacto = [];
+        esferasCampo = [];
+        disparosJugador = [];
+        particulasMuerte = [];
+
+        juegoActivo = true;
+        cancelAnimationFrame(animacionId);
+        if (nivel === 2 && typeof iniciarNivel2 === 'function') {
+            iniciarNivel2();
+        } else if (nivel === 3 && typeof iniciarNivel3 === 'function') {
+            iniciarNivel3();
+        } else {
+            bucleJuego();
+        }
+        iniciarCuentaRegresiva();
+    }
+
+    function volverAlMenu() {
+        juegoActivo = false;
+        puedeMoverse = false;
+        clearInterval(intervaloContador);
+        cancelAnimationFrame(animacionId);
+        if (typeof animacionIdNivel2 !== 'undefined') {
+            cancelAnimationFrame(animacionIdNivel2);
+        }
+        if (typeof animacionIdNivel3 !== 'undefined') {
+            cancelAnimationFrame(animacionIdNivel3);
+            if (typeof restaurarCanvasNivel3 === 'function') restaurarCanvasNivel3();
+        }
+    }
+    actualizarTrofeosUI();
+</script>
+{% include 'arcade_nivel2.html' %}
+{% include 'arcade_nivel3.html' %}
+{% endblock %}

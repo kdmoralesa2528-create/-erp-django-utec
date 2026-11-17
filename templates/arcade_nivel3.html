@@ -1,0 +1,1083 @@
+<script>
+    let animacionIdNivel3 = null;
+
+    const n3Estado = {
+        canvasWOriginal: 800,
+        canvasHOriginal: 440,
+        canvasW: 800,
+        canvasH: 640,
+        nubes: [],
+        balasCanon: [],
+        franjasAviso: [],
+        bombasMapa: [],
+        corazonesMapa: [],
+        proyectilesJugador: [],
+        secuaces: [],
+        bolitasSecuaces: [],
+        explosiones: [],
+        llamasGlobo: [],
+        ultimoAtaqueCanon: 0,
+        secuacesEliminadosEn: 0,
+        ultimaBombaCaida: 0,
+        ultimoCorazonCaido: 0,
+        aleteoTimer: 0
+    };
+
+    const jefeN3 = {
+        x: 210,
+        y: 35,
+        ancho: 380,
+        alto: 225,
+        baseX: 210,
+        baseY: 35,
+        vidaMax: 250,
+        vida: 250,
+        danioFlashHasta: 0,
+        muriendo: false,
+        inicioMuerte: 0,
+        anguloBalanceo: 0,
+        enFuria: false
+    };
+
+    // Asegurar que el botón "✕ Salir" siempre funcione
+    document.addEventListener('DOMContentLoaded', () => {
+        const btnSalir = document.querySelector('button[onclick="volverAlMenu()"]');
+        if (btnSalir) {
+            btnSalir.addEventListener('click', (e) => {
+                e.preventDefault();
+                juegoActivo = false;
+                puedeMoverse = false;
+                if (typeof intervaloContador !== 'undefined') clearInterval(intervaloContador);
+                if (typeof animacionId !== 'undefined') cancelAnimationFrame(animacionId);
+                if (typeof animacionIdNivel2 !== 'undefined') cancelAnimationFrame(animacionIdNivel2);
+                if (animacionIdNivel3) cancelAnimationFrame(animacionIdNivel3);
+                restaurarCanvasNivel3();
+                const pJuego = document.getElementById('pantalla-juego');
+                const mNiveles = document.getElementById('menu-niveles');
+                if (pJuego) pJuego.style.display = 'none';
+                if (mNiveles) mNiveles.style.display = 'block';
+            });
+        }
+    });
+
+    function iniciarNivel3() {
+        cancelAnimationFrame(animacionIdNivel3);
+
+        n3Estado.canvasWOriginal = canvas.width;
+        n3Estado.canvasHOriginal = canvas.height;
+        canvas.width = n3Estado.canvasW;
+        canvas.height = n3Estado.canvasH;
+
+        const ahora = Date.now();
+        // En Modo Extremo: 350 HP y empieza en modo furioso/enojado desde el inicio
+        jefeN3.vidaMax = modoExtremo ? 350 : 250;
+        jefeN3.vida = jefeN3.vidaMax;
+        jefeN3.baseX = (canvas.width - jefeN3.ancho) / 2;
+        jefeN3.baseY = 38;
+        jefeN3.x = jefeN3.baseX;
+        jefeN3.y = jefeN3.baseY;
+        jefeN3.danioFlashHasta = 0;
+        jefeN3.muriendo = false;
+        jefeN3.inicioMuerte = 0;
+        jefeN3.anguloBalanceo = 0;
+        jefeN3.enFuria = modoExtremo ? true : false;
+
+        jugador.x = (canvas.width - jugador.tam) / 2;
+        jugador.y = canvas.height - 85;
+        jugador.vidasMax = 3;
+        jugador.vidas = 3;
+        jugador.invulnerableHasta = 0;
+        jugador.esferas = 0;
+        actualizarCorazonesUI();
+
+        const hudEnergia = document.getElementById('cargas-energia');
+        if (hudEnergia) {
+            hudEnergia.textContent = modoExtremo
+                ? '🔥 EXTREMO: ¡Sin curaciones ni secuaces!'
+                : '💣 Recoge las bombas que caen';
+            hudEnergia.style.color = modoExtremo ? '#ff1e1e' : '#ff9f1c';
+        }
+
+        n3Estado.nubes = [];
+        for (let i = 0; i < 9; i++) {
+            n3Estado.nubes.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                ancho: 100 + Math.random() * 95,
+                alto: 30 + Math.random() * 18,
+                velX: (Math.random() > 0.5 ? 1 : -1) * (0.3 + Math.random() * 0.5)
+            });
+        }
+
+        n3Estado.balasCanon = [];
+        n3Estado.franjasAviso = [];
+        n3Estado.bombasMapa = [];
+        n3Estado.corazonesMapa = [];
+        n3Estado.proyectilesJugador = [];
+        n3Estado.secuaces = [];
+        n3Estado.bolitasSecuaces = [];
+        n3Estado.explosiones = [];
+        n3Estado.llamasGlobo = [];
+        n3Estado.ultimoAtaqueCanon = ahora + 1200;
+        // En Modo Extremo los secuaces quedan desactivados (0) para balancear el combate
+        n3Estado.secuacesEliminadosEn = modoExtremo ? 0 : (ahora - 4000);
+        n3Estado.ultimaBombaCaida = ahora;
+        n3Estado.ultimoCorazonCaido = ahora;
+
+        bucleNivel3();
+    }
+
+    function restaurarCanvasNivel3() {
+        if (canvas.height !== n3Estado.canvasHOriginal) {
+            canvas.width = n3Estado.canvasWOriginal;
+            canvas.height = n3Estado.canvasHOriginal;
+        }
+    }
+
+    function recibirDanioJugadorN3() {
+        const ahora = Date.now();
+        if (ahora < jugador.invulnerableHasta || jugador.vidas <= 0 || jefeN3.vida <= 0 || jefeN3.muriendo) return;
+        jugador.vidas--;
+        jugador.invulnerableHasta = ahora + 1200;
+        actualizarCorazonesUI();
+
+        if (jugador.vidas <= 0) {
+            puedeMoverse = false;
+            textoContador = 'GAME OVER';
+            const etiqueta = modoExtremo ? 'NIVEL 3 EXTREMO' : 'NIVEL 3';
+            document.getElementById('titulo-nivel-activo').textContent = etiqueta + ' — DERROTADO';
+        }
+    }
+
+    function crearExplosionN3(x, y, color = '#ff9f1c', cantidad = 16) {
+        for (let i = 0; i < cantidad; i++) {
+            const ang = Math.random() * Math.PI * 2;
+            const vel = 1.5 + Math.random() * 4.5;
+            n3Estado.explosiones.push({
+                x, y,
+                vx: Math.cos(ang) * vel,
+                vy: Math.sin(ang) * vel,
+                tam: 3 + Math.random() * 5,
+                color,
+                vida: 1.0
+            });
+        }
+    }
+
+    function actualizarNivel3() {
+        if (!puedeMoverse || jugador.vidas <= 0 || jefeN3.vida <= 0 || jefeN3.muriendo) return;
+        const ahora = Date.now();
+
+        // En Modo Normal activa FASE 2 al llegar a mitad de vida
+        if (!jefeN3.enFuria && jefeN3.vida <= jefeN3.vidaMax / 2) {
+            jefeN3.enFuria = true;
+            crearExplosionN3(jefeN3.x + jefeN3.ancho * 0.45, jefeN3.y + 80, '#ff5400', 40);
+        }
+
+        // 1. Movimiento libre volando por toda la pantalla
+        if (teclas.ArrowUp) jugador.y -= jugador.vel;
+        if (teclas.ArrowDown) jugador.y += jugador.vel;
+        if (teclas.ArrowLeft) jugador.x -= jugador.vel;
+        if (teclas.ArrowRight) jugador.x += jugador.vel;
+
+        if (jugador.x < 12) jugador.x = 12;
+        if (jugador.y < 245) jugador.y = 245;
+        if (jugador.x + jugador.tam > canvas.width - 12) jugador.x = canvas.width - 12 - jugador.tam;
+        if (jugador.y + jugador.tam > canvas.height - 12) jugador.y = canvas.height - 12 - jugador.tam;
+
+        // 2. Balanceo amplio del dirigible gigante
+        jefeN3.anguloBalanceo += jefeN3.enFuria ? 0.032 : 0.022;
+        jefeN3.x = jefeN3.baseX + Math.sin(jefeN3.anguloBalanceo) * 155;
+        jefeN3.y = jefeN3.baseY + Math.cos(jefeN3.anguloBalanceo * 2) * 9;
+
+        // Llamas y humo continuo cuando el globo está en furia/incendiado
+        if (jefeN3.enFuria && Math.random() < 0.7) {
+            const gx = jefeN3.x + jefeN3.ancho * 0.45 + (Math.random() - 0.5) * 240;
+            const gy = jefeN3.y + 45 + (Math.random() - 0.5) * 90;
+            n3Estado.llamasGlobo.push({
+                x: gx,
+                y: gy,
+                vx: (Math.random() - 0.5) * 1.4,
+                vy: -1.8 - Math.random() * 2.2,
+                radio: 8 + Math.random() * 10,
+                vida: 1.0,
+                esHumo: Math.random() < 0.35
+            });
+        }
+
+        const jugCX = jugador.x + jugador.tam / 2;
+        const jugCY = jugador.y + jugador.tam / 2;
+
+        // 3. Corazón curativo cada 30 segundos (SOLO en Modo Normal; en Extremo NO aparecen)
+        if (!modoExtremo && ahora - n3Estado.ultimoCorazonCaido >= 30000) {
+            n3Estado.ultimoCorazonCaido = ahora;
+            n3Estado.corazonesMapa.push({
+                x: 90 + Math.random() * (canvas.width - 180),
+                y: 230,
+                vy: 1.6,
+                destinoY: 320 + Math.random() * (canvas.height - 390),
+                radio: 15,
+                creadaEn: ahora
+            });
+        }
+
+        n3Estado.corazonesMapa = n3Estado.corazonesMapa.filter(cor => {
+            if (cor.y < cor.destinoY) {
+                cor.y += cor.vy;
+            } else {
+                cor.y += Math.sin((ahora - cor.creadaEn) / 220) * 0.5;
+            }
+
+            if (Math.hypot(jugCX - cor.x, jugCY - cor.y) <= cor.radio + jugador.tam * 0.65) {
+                if (jugador.vidas < jugador.vidasMax) {
+                    jugador.vidas++;
+                    actualizarCorazonesUI();
+                }
+                crearExplosionN3(cor.x, cor.y, '#ff4d6d', 20);
+                return false;
+            }
+            return (ahora - cor.creadaEn) < 18000;
+        });
+
+        // 4. Bombas que caen del globo para recolectar
+        if (n3Estado.bombasMapa.length < 3 && ahora - n3Estado.ultimaBombaCaida >= 2500) {
+            n3Estado.ultimaBombaCaida = ahora;
+            n3Estado.bombasMapa.push({
+                x: jefeN3.x + jefeN3.ancho * 0.45 + (Math.random() - 0.5) * 110,
+                y: jefeN3.y + jefeN3.alto - 10,
+                vy: 2.4,
+                radio: 14,
+                destinoY: 300 + Math.random() * (canvas.height - 360),
+                creadaEn: ahora
+            });
+        }
+
+        n3Estado.bombasMapa = n3Estado.bombasMapa.filter(b => {
+            if (b.y < b.destinoY) {
+                b.y += b.vy;
+            } else {
+                b.y += Math.sin((ahora - b.creadaEn) / 200) * 0.45;
+            }
+
+            if (Math.hypot(jugCX - b.x, jugCY - b.y) <= b.radio + jugador.tam * 0.65) {
+                let secuazCercano = null;
+                let minDistSecuaz = 225;
+                n3Estado.secuaces.forEach(sec => {
+                    if (!sec.vivo) return;
+                    const scx = sec.x + sec.tam / 2;
+                    const scy = sec.y + sec.tam / 2;
+                    const dSec = Math.hypot(jugCX - scx, jugCY - scy);
+                    if (dSec < minDistSecuaz) {
+                        minDistSecuaz = dSec;
+                        secuazCercano = sec;
+                    }
+                });
+
+                n3Estado.proyectilesJugador.push({
+                    x: jugCX,
+                    y: jugCY,
+                    vel: 12,
+                    radio: 13,
+                    objetivoSecuaz: secuazCercano
+                });
+                return false;
+            }
+            return (ahora - b.creadaEn) < 14000;
+        });
+
+        // 5. Proyectiles del jugador (10 de daño al jefe o 1 golpe a secuaz cercano)
+        n3Estado.proyectilesJugador = n3Estado.proyectilesJugador.filter(p => {
+            let tx = jefeN3.x + jefeN3.ancho * 0.45;
+            let ty = jefeN3.y + jefeN3.alto * 0.55;
+
+            if (p.objetivoSecuaz && p.objetivoSecuaz.vivo) {
+                tx = p.objetivoSecuaz.x + p.objetivoSecuaz.tam / 2;
+                ty = p.objetivoSecuaz.y + p.objetivoSecuaz.tam / 2;
+            }
+
+            const ang = Math.atan2(ty - p.y, tx - p.x);
+            p.x += Math.cos(ang) * p.vel;
+            p.y += Math.sin(ang) * p.vel;
+
+            for (let i = 0; i < n3Estado.secuaces.length; i++) {
+                const sec = n3Estado.secuaces[i];
+                if (!sec.vivo) continue;
+                const scx = sec.x + sec.tam / 2;
+                const scy = sec.y + sec.tam / 2;
+                if (Math.hypot(p.x - scx, p.y - scy) <= sec.tam * 0.8 + p.radio) {
+                    sec.vivo = false;
+                    crearExplosionN3(scx, scy, '#ff5400', 24);
+                    if (n3Estado.secuaces.filter(s => s.vivo).length === 0) {
+                        n3Estado.secuacesEliminadosEn = ahora;
+                    }
+                    return false;
+                }
+            }
+
+            if (p.x > jefeN3.x + 25 && p.x < jefeN3.x + jefeN3.ancho - 45 &&
+                p.y > jefeN3.y + 15 && p.y < jefeN3.y + jefeN3.alto - 5) {
+                jefeN3.vida = Math.max(0, jefeN3.vida - 10);
+                jefeN3.danioFlashHasta = ahora + 160;
+                crearExplosionN3(p.x, p.y, '#FFF52D', 22);
+
+                if (jefeN3.vida <= 0 && !jefeN3.muriendo) {
+                    jefeN3.muriendo = true;
+                    jefeN3.inicioMuerte = ahora;
+                    puedeMoverse = false;
+                    n3Estado.franjasAviso = [];
+                    n3Estado.balasCanon = [];
+                    n3Estado.bolitasSecuaces = [];
+                    n3Estado.secuaces = [];
+                }
+                return false;
+            }
+            return true;
+        });
+
+        // 6. Ataque de 3 cañones: en Furia (y desde el inicio en Extremo) dispara cada 1s con aviso de 1s
+        const intervaloCanones = jefeN3.enFuria ? 1000 : 4300;
+        const duracionAvisoActual = jefeN3.enFuria ? 1000 : 2000;
+
+        if (ahora - n3Estado.ultimoAtaqueCanon >= intervaloCanones) {
+            n3Estado.ultimoAtaqueCanon = ahora;
+            const angulos = [Math.PI * 0.64, Math.PI * 0.5, Math.PI * 0.36];
+            angulos.forEach(ang => {
+                n3Estado.franjasAviso.push({
+                    angulo: ang,
+                    creadaEn: ahora,
+                    duracionAviso: duracionAvisoActual,
+                    disparada: false
+                });
+            });
+        }
+
+        const canonX = jefeN3.x + jefeN3.ancho * 0.45;
+        const canonY = jefeN3.y + jefeN3.alto - 10;
+
+        n3Estado.franjasAviso = n3Estado.franjasAviso.filter(f => {
+            const trans = ahora - f.creadaEn;
+            if (!f.disparada && trans >= f.duracionAviso) {
+                f.disparada = true;
+                const velBala = jefeN3.enFuria ? 9.2 : 7.6;
+                n3Estado.balasCanon.push({
+                    x: canonX,
+                    y: canonY,
+                    vx: Math.cos(f.angulo) * velBala,
+                    vy: Math.sin(f.angulo) * velBala,
+                    radio: 32
+                });
+                return false;
+            }
+            return !f.disparada;
+        });
+
+        n3Estado.balasCanon = n3Estado.balasCanon.filter(b => {
+            b.x += b.vx;
+            b.y += b.vy;
+            if (Math.hypot(jugCX - b.x, jugCY - b.y) <= b.radio + jugador.tam * 0.36) {
+                recibirDanioJugadorN3();
+                crearExplosionN3(b.x, b.y, '#ff1e1e', 20);
+                return false;
+            }
+            return b.y < canvas.height + 50 && b.x > -50 && b.x < canvas.width + 50;
+        });
+
+        // 7. Secuaces: SOLO aparecen en Modo Normal (en Modo Extremo NO aparecen para balancear)
+        n3Estado.secuaces = n3Estado.secuaces.filter(sec => sec.vivo);
+        if (!modoExtremo && n3Estado.secuaces.length === 0 && n3Estado.secuacesEliminadosEn > 0 &&
+            (ahora - n3Estado.secuacesEliminadosEn >= 10000)) {
+            n3Estado.secuacesEliminadosEn = 0;
+            n3Estado.secuaces.push(
+                {
+                    x: canonX, y: canonY,
+                    destinoX: 46,
+                    tam: jugador.tam, lado: 'izq',
+                    faseY: 0, velY: 0.035,
+                    vivo: true, ultimoDisparo: ahora + 900
+                },
+                {
+                    x: canonX, y: canonY,
+                    destinoX: canvas.width - 46 - jugador.tam,
+                    tam: jugador.tam, lado: 'der',
+                    faseY: Math.PI, velY: 0.035,
+                    vivo: true, ultimoDisparo: ahora + 900
+                }
+            );
+        }
+
+        n3Estado.secuaces.forEach(sec => {
+            sec.x += (sec.destinoX - sec.x) * 0.07;
+            sec.faseY += sec.velY;
+            const objetivoY = 415 + Math.sin(sec.faseY) * 145;
+            sec.y += (objetivoY - sec.y) * 0.1;
+
+            if (ahora - sec.ultimoDisparo >= 2300) {
+                sec.ultimoDisparo = ahora;
+                const dirX = sec.lado === 'izq' ? 1 : -1;
+                const salidaX = sec.lado === 'izq' ? (sec.x + sec.tam + 6) : (sec.x - 6);
+                [-18, 0, 18].forEach(offsetY => {
+                    n3Estado.bolitasSecuaces.push({
+                        x: salidaX,
+                        y: sec.y + sec.tam / 2 + offsetY,
+                        vx: dirX * 5.2,
+                        vy: offsetY * 0.03,
+                        radio: 7
+                    });
+                });
+            }
+        });
+
+        n3Estado.bolitasSecuaces = n3Estado.bolitasSecuaces.filter(bol => {
+            bol.x += bol.vx;
+            bol.y += bol.vy;
+            if (Math.hypot(jugCX - bol.x, jugCY - bol.y) <= bol.radio + jugador.tam * 0.36) {
+                recibirDanioJugadorN3();
+                return false;
+            }
+            return bol.x > -20 && bol.x < canvas.width + 20;
+        });
+    }
+
+    function actualizarAnimacionDerrotaN3() {
+        if (!jefeN3.muriendo) return;
+        const ahora = Date.now();
+        const trans = ahora - jefeN3.inicioMuerte;
+
+        // Durante 2.4 segundos: explosiones encadenadas por todo el dirigible y la góndola
+        if (trans < 2400) {
+            if (Math.random() < 0.78) {
+                const colores = ['#ff1e1e', '#ff5400', '#FFF52D', '#ffffff'];
+                const color = colores[Math.floor(Math.random() * colores.length)];
+                crearExplosionN3(
+                    jefeN3.x + 20 + Math.random() * (jefeN3.ancho - 40),
+                    jefeN3.y + 10 + Math.random() * (jefeN3.alto - 10),
+                    color,
+                    14
+                );
+            }
+            jefeN3.y += 0.45;
+        } else if (trans >= 2400 && textoContador !== '¡JEFE VENCIDO!') {
+            // Gran detonación final en pedazos
+            const cx = jefeN3.x + jefeN3.ancho * 0.45;
+            const cy = jefeN3.y + jefeN3.alto * 0.5;
+            crearExplosionN3(cx, cy, '#FFF52D', 55);
+            crearExplosionN3(cx - 75, cy - 15, '#ff5400', 40);
+            crearExplosionN3(cx + 75, cy + 10, '#ff1e1e', 40);
+            crearExplosionN3(cx, cy + 65, '#ffffff', 35);
+
+            textoContador = '¡JEFE VENCIDO!';
+            const etiqueta = modoExtremo ? 'NIVEL 3 EXTREMO' : 'NIVEL 3';
+            document.getElementById('titulo-nivel-activo').textContent = etiqueta + ' — ¡COMPLETADO!';
+            ganarCopaJefe(3);
+        }
+    }
+
+    function dibujarDirigibleYBufon() {
+        const ahora = Date.now();
+        if (jefeN3.muriendo && (ahora - jefeN3.inicioMuerte >= 2400)) return;
+
+        const golpeado = ahora < jefeN3.danioFlashHasta;
+        const cx = jefeN3.x + jefeN3.ancho * 0.45;
+        const cy = jefeN3.y + 82;
+        const rx = 154;
+        const ry = 82;
+
+        ctx.save();
+        if (jefeN3.muriendo) {
+            const progMuerte = (ahora - jefeN3.inicioMuerte) / 2400;
+            const sacudida = 14 + progMuerte * 16;
+            ctx.translate((Math.random() - 0.5) * sacudida, (Math.random() - 0.5) * sacudida);
+            ctx.globalAlpha = Math.max(0.1, 1 - progMuerte * 0.85);
+        } else if (jefeN3.enFuria) {
+            ctx.translate((Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3);
+        }
+
+        const flashBlancoMuerte = jefeN3.muriendo && (Math.floor(ahora / 75) % 2 === 0);
+
+        // 1. Alerones / Timones blindados de guerra en la parte trasera
+        ctx.fillStyle = (golpeado || flashBlancoMuerte) ? '#ffffff' : '#1b1d21';
+        ctx.strokeStyle = '#090a0c';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx + 85, cy - 72);
+        ctx.lineTo(cx + 222, cy - 58);
+        ctx.lineTo(cx + 188, cy - 4);
+        ctx.lineTo(cx + 215, cy + 48);
+        ctx.lineTo(cx + 95, cy + 36);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#d90429';
+        ctx.beginPath();
+        ctx.moveTo(cx + 150, cy - 58);
+        ctx.lineTo(cx + 210, cy - 52);
+        ctx.lineTo(cx + 190, cy - 22);
+        ctx.lineTo(cx + 145, cy - 30);
+        ctx.closePath();
+        ctx.fill();
+
+        // Propulsor trasero con llama
+        ctx.fillStyle = '#343a40';
+        ctx.fillRect(cx + 145, cy - 12, 26, 18);
+        ctx.strokeRect(cx + 145, cy - 12, 26, 18);
+        const llamaW = (jefeN3.enFuria ? 38 : 24) + Math.sin(ahora / 40) * 10;
+        ctx.fillStyle = '#ff5400';
+        ctx.beginPath();
+        ctx.moveTo(cx + 171, cy - 10);
+        ctx.lineTo(cx + 171 + llamaW, cy - 3);
+        ctx.lineTo(cx + 171, cy + 4);
+        ctx.closePath();
+        ctx.fill();
+
+        // 2. Cuerpo principal del dirigible NEGRO CARBÓN blindado
+        const gradGlobo = ctx.createRadialGradient(cx - 40, cy - 28, 15, cx, cy, rx);
+        if (flashBlancoMuerte) {
+            gradGlobo.addColorStop(0, '#ffffff');
+            gradGlobo.addColorStop(0.55, '#FFF52D');
+            gradGlobo.addColorStop(1, '#ff5400');
+        } else if (golpeado) {
+            gradGlobo.addColorStop(0, '#80ffea');
+            gradGlobo.addColorStop(0.55, '#00b4d8');
+            gradGlobo.addColorStop(1, '#0077b6');
+        } else if (jefeN3.enFuria) {
+            gradGlobo.addColorStop(0, '#5c1a1b');
+            gradGlobo.addColorStop(0.55, '#212529');
+            gradGlobo.addColorStop(1, '#0b0c0e');
+        } else {
+            gradGlobo.addColorStop(0, '#495057');
+            gradGlobo.addColorStop(0.55, '#212529');
+            gradGlobo.addColorStop(1, '#0b0c0e');
+        }
+
+        ctx.fillStyle = gradGlobo;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = jefeN3.enFuria ? '#ff5400' : '#050505';
+        ctx.lineWidth = 3.2;
+        ctx.stroke();
+
+        // 3. Gajos verticales y costuras blindadas
+        ctx.strokeStyle = '#111315';
+        ctx.lineWidth = 2.2;
+        [48, 98, 136].forEach(w => {
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, w, ry, 0, 0, Math.PI * 2);
+            ctx.stroke();
+        });
+
+        // Cinturón ecuatorial blindado con remaches
+        ctx.fillStyle = '#16181b';
+        ctx.fillRect(cx - rx + 4, cy - 6, (rx - 4) * 2, 12);
+        ctx.strokeRect(cx - rx + 4, cy - 6, (rx - 4) * 2, 12);
+        ctx.fillStyle = '#6c757d';
+        for (let rxPos = cx - rx + 16; rxPos < cx + rx - 12; rxPos += 22) {
+            ctx.beginPath();
+            ctx.arc(rxPos, cy, 2.2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Escotilla superior blindada
+        ctx.fillStyle = '#343a40';
+        ctx.beginPath();
+        ctx.ellipse(cx, cy - ry + 2, 34, 9, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#0b0c0e';
+        ctx.beginPath();
+        ctx.ellipse(cx, cy - ry + 2, 22, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 4. GRAN LETRA "R" ROJA CON BORDE BLANCO
+        ctx.save();
+        ctx.font = '900 84px "Arial Black", Impact, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = 7;
+        ctx.strokeStyle = '#ffffff';
+        ctx.strokeText('R', cx, cy + 4);
+        ctx.fillStyle = '#d90429';
+        ctx.fillText('R', cx, cy + 4);
+        ctx.restore();
+
+        // Llamas del incendio alrededor del globo cuando está en Furia
+        if (jefeN3.enFuria && Array.isArray(n3Estado.llamasGlobo)) {
+            for (let i = n3Estado.llamasGlobo.length - 1; i >= 0; i--) {
+                const ll = n3Estado.llamasGlobo[i];
+                ll.x += ll.vx;
+                ll.y += ll.vy;
+                ll.vida -= 0.032;
+                if (ll.vida <= 0.02) {
+                    n3Estado.llamasGlobo.splice(i, 1);
+                    continue;
+                }
+                const radioLlama = Math.max(0.5, ll.radio * ll.vida);
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, Math.min(1, ll.vida * 0.85));
+                ctx.fillStyle = ll.esHumo ? '#2b2d42' : (ll.vida > 0.55 ? '#FFF52D' : '#ff5400');
+                ctx.beginPath();
+                ctx.arc(ll.x, ll.y, radioLlama, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // 5. Collarín metálico gris acero y cables de acero gruesos
+        ctx.fillStyle = '#495057';
+        ctx.strokeStyle = '#111';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(cx - 46, cy + ry - 6);
+        ctx.lineTo(cx + 46, cy + ry - 6);
+        ctx.lineTo(cx + 38, cy + ry + 14);
+        ctx.lineTo(cx - 38, cy + ry + 14);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.strokeStyle = '#1f2428';
+        ctx.lineWidth = 2.6;
+        [[-58, -52], [-28, -26], [28, 26], [58, 52]].forEach(([x1, x2]) => {
+            ctx.beginPath();
+            ctx.moveTo(cx + x1, cy + ry + 6);
+            ctx.lineTo(cx + x2, cy + ry + 44);
+            ctx.stroke();
+        });
+
+        // 6. Góndola de guerra acorazada
+        const gonY = cy + ry + 44;
+        ctx.fillStyle = '#2b2d42';
+        ctx.strokeStyle = '#090a0c';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx - 60, gonY);
+        ctx.lineTo(cx + 68, gonY);
+        ctx.lineTo(cx + 48, gonY + 28);
+        ctx.lineTo(cx - 48, gonY + 28);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#d90429';
+        ctx.fillRect(cx - 53, gonY + 6, 112, 6);
+
+        ctx.strokeStyle = '#6c757d';
+        ctx.lineWidth = 2.2;
+        ctx.strokeRect(cx - 54, gonY - 14, 112, 14);
+
+        const heliceH = 18 + Math.sin(ahora / 35) * 14;
+        ctx.strokeStyle = '#111';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(cx + 74, gonY - heliceH);
+        ctx.lineTo(cx + 74, gonY + heliceH);
+        ctx.stroke();
+
+        // 7. EL BUFÓN
+        const bx = cx;
+        const by = gonY - 15;
+
+        ctx.fillStyle = jefeN3.enFuria ? '#ffb703' : '#7209b7';
+        ctx.strokeStyle = '#111';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(bx - 8, by - 14);
+        ctx.quadraticCurveTo(bx - 36, by - 46, bx - 44, by - 18);
+        ctx.quadraticCurveTo(bx - 32, by - 26, bx - 18, by - 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = jefeN3.enFuria ? '#fb8500' : '#00b4d8';
+        ctx.beginPath();
+        ctx.moveTo(bx + 8, by - 14);
+        ctx.quadraticCurveTo(bx + 36, by - 46, bx + 44, by - 18);
+        ctx.quadraticCurveTo(bx + 32, by - 26, bx + 18, by - 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = jefeN3.enFuria ? '#ff1e1e' : '#FFF52D';
+        ctx.beginPath();
+        ctx.arc(bx - 43, by - 18, 6, 0, Math.PI * 2);
+        ctx.arc(bx + 43, by - 18, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = jefeN3.enFuria ? '#ffd60a' : '#f8f9fa';
+        ctx.fillRect(bx - 16, by - 15, 32, 26);
+        ctx.strokeRect(bx - 16, by - 15, 32, 26);
+
+        ctx.fillStyle = jefeN3.enFuria ? '#d90429' : '#3a0ca3';
+        ctx.fillRect(bx - 17, by - 19, 34, 6);
+        ctx.strokeRect(bx - 17, by - 19, 34, 6);
+
+        if (!jefeN3.enFuria) {
+            ctx.fillStyle = '#111';
+            ctx.beginPath();
+            ctx.arc(bx - 10, by - 9, 2, 0, Math.PI * 2);
+            ctx.arc(bx + 10, by - 9, 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#370617';
+            ctx.beginPath();
+            ctx.moveTo(bx - 13, by - 5);
+            ctx.lineTo(bx + 13, by - 5);
+            ctx.quadraticCurveTo(bx + 13, by + 9, bx, by + 9);
+            ctx.quadraticCurveTo(bx - 13, by + 9, bx - 13, by - 5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#111';
+            ctx.lineWidth = 1.4;
+            ctx.stroke();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(bx - 7, by - 5, 6.5, 6.5);
+            ctx.strokeRect(bx - 7, by - 5, 6.5, 6.5);
+            ctx.fillRect(bx + 0.5, by - 5, 6.5, 6.5);
+            ctx.strokeRect(bx + 0.5, by - 5, 6.5, 6.5);
+        } else {
+            ctx.strokeStyle = '#111';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(bx - 12, by - 10);
+            ctx.lineTo(bx - 2, by - 6);
+            ctx.moveTo(bx + 12, by - 10);
+            ctx.lineTo(bx + 2, by - 6);
+            ctx.moveTo(bx, by - 11);
+            ctx.lineTo(bx, by - 6);
+            ctx.stroke();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(bx - 11, by - 6, 7, 3.5);
+            ctx.fillRect(bx + 4, by - 6, 7, 3.5);
+            ctx.fillStyle = '#111';
+            ctx.fillRect(bx - 9, by - 6, 3.5, 3.5);
+            ctx.fillRect(bx + 5.5, by - 6, 3.5, 3.5);
+
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(bx - 8, by + 1);
+            ctx.lineTo(bx - 10, by + 6);
+            ctx.moveTo(bx + 8, by + 1);
+            ctx.lineTo(bx + 10, by + 6);
+            ctx.moveTo(bx - 7, by + 5);
+            ctx.lineTo(bx + 7, by + 5);
+            ctx.stroke();
+        }
+
+        // 8. 3 Cañones pesados debajo de la góndola
+        ctx.fillStyle = '#0b090a';
+        [-28, 0, 28].forEach(ox => {
+            ctx.fillRect(cx + ox - 8, gonY + 26, 16, 15);
+            ctx.strokeRect(cx + ox - 8, gonY + 26, 16, 15);
+        });
+
+        ctx.restore();
+    }
+
+    function dibujarSecuazMiniGlobo(sec) {
+        const cx = sec.x + sec.tam / 2;
+        const cy = sec.y + 7;
+
+        ctx.save();
+        ctx.fillStyle = '#d90429';
+        ctx.strokeStyle = '#090a0c';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(cx - 12, cy - 4);
+        ctx.lineTo(cx - 21, cy - 10);
+        ctx.lineTo(cx - 16, cy + 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(cx + 12, cy - 4);
+        ctx.lineTo(cx + 21, cy - 10);
+        ctx.lineTo(cx + 16, cy + 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        const gradSec = ctx.createRadialGradient(cx - 4, cy - 4, 2, cx, cy, 16);
+        gradSec.addColorStop(0, '#495057');
+        gradSec.addColorStop(1, '#111315');
+        ctx.fillStyle = gradSec;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 15, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#ff1e1e';
+        ctx.font = 'bold 12px "Arial Black", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('R', cx, cy + 1);
+
+        ctx.strokeStyle = '#222';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(cx - 8, cy + 13);
+        ctx.lineTo(cx - 7, cy + 21);
+        ctx.moveTo(cx + 8, cy + 13);
+        ctx.lineTo(cx + 7, cy + 21);
+        ctx.stroke();
+
+        ctx.fillStyle = '#212529';
+        ctx.fillRect(cx - 9, cy + 21, 18, 11);
+        ctx.strokeRect(cx - 9, cy + 21, 18, 11);
+        ctx.fillStyle = '#d90429';
+        ctx.fillRect(cx - 8, cy + 24, 16, 3);
+
+        ctx.fillStyle = '#adb5bd';
+        [-5, 0, 5].forEach(px => {
+            ctx.beginPath();
+            ctx.moveTo(cx + px - 2, cy + 32);
+            ctx.lineTo(cx + px, cy + 37);
+            ctx.lineTo(cx + px + 2, cy + 32);
+            ctx.closePath();
+            ctx.fill();
+        });
+
+        ctx.restore();
+    }
+
+    function dibujarJugadorConElitros() {
+        const ahora = Date.now();
+        const parpadeo = ahora < jugador.invulnerableHasta && Math.floor(ahora / 100) % 2 === 0;
+        if (parpadeo) return;
+
+        n3Estado.aleteoTimer += 0.22;
+        const aperturaAlas = 12 + Math.sin(n3Estado.aleteoTimer) * 5;
+
+        ctx.save();
+        ctx.fillStyle = '#8d99ae';
+        ctx.strokeStyle = '#2b2d42';
+        ctx.lineWidth = 1.8;
+
+        ctx.beginPath();
+        ctx.moveTo(jugador.x + 6, jugador.y + 8);
+        ctx.lineTo(jugador.x - aperturaAlas, jugador.y + 24);
+        ctx.lineTo(jugador.x + 4, jugador.y + 30);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(jugador.x + jugador.tam - 6, jugador.y + 8);
+        ctx.lineTo(jugador.x + jugador.tam + aperturaAlas, jugador.y + 24);
+        ctx.lineTo(jugador.x + jugador.tam - 4, jugador.y + 30);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.shadowColor = '#4d82bc';
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = '#4d82bc';
+        ctx.fillRect(jugador.x, jugador.y, jugador.tam, jugador.tam);
+        ctx.restore();
+    }
+
+    function dibujarEscenaNivel3() {
+        const ahora = Date.now();
+
+        const gradCielo = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        gradCielo.addColorStop(0, '#1d4e89');
+        gradCielo.addColorStop(0.55, '#4ea8de');
+        gradCielo.addColorStop(1, '#ade8f4');
+        ctx.fillStyle = gradCielo;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        n3Estado.nubes.forEach(n => {
+            n.x += n.velX;
+            if (n.x > canvas.width + 60) n.x = -n.ancho - 60;
+            if (n.x < -n.ancho - 60) n.x = canvas.width + 60;
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+            ctx.beginPath();
+            ctx.ellipse(n.x, n.y, n.ancho / 2, n.alto / 2, 0, 0, Math.PI * 2);
+            ctx.ellipse(n.x - n.ancho * 0.22, n.y + 4, n.ancho * 0.3, n.alto * 0.4, 0, 0, Math.PI * 2);
+            ctx.ellipse(n.x + n.ancho * 0.22, n.y + 4, n.ancho * 0.3, n.alto * 0.4, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        const canonX = jefeN3.x + jefeN3.ancho * 0.45;
+        const canonY = jefeN3.y + jefeN3.alto - 10;
+        n3Estado.franjasAviso.forEach(f => {
+            const prog = Math.min(1, (ahora - f.creadaEn) / f.duracionAviso);
+            const ex = canonX + Math.cos(f.angulo) * 750;
+            const ey = canonY + Math.sin(f.angulo) * 750;
+
+            ctx.save();
+            ctx.strokeStyle = `rgba(255, 20, 20, ${0.22 + prog * 0.38})`;
+            ctx.lineWidth = 64;
+            ctx.beginPath();
+            ctx.moveTo(canonX, canonY);
+            ctx.lineTo(ex, ey);
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(255, 30, 30, 0.92)';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([10, 8]);
+            ctx.beginPath();
+            ctx.moveTo(canonX, canonY);
+            ctx.lineTo(ex, ey);
+            ctx.stroke();
+            ctx.restore();
+        });
+
+        n3Estado.corazonesMapa.forEach(cor => {
+            ctx.save();
+            ctx.shadowColor = '#ff4d6d';
+            ctx.shadowBlur = 16;
+            ctx.fillStyle = '#ff1e42';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.8;
+
+            const x = cor.x, y = cor.y, r = 11;
+            ctx.beginPath();
+            ctx.moveTo(x, y + r * 0.85);
+            ctx.bezierCurveTo(x - r * 1.4, y - r * 0.2, x - r * 0.7, y - r * 1.2, x, y - r * 0.4);
+            ctx.bezierCurveTo(x + r * 0.7, y - r * 1.2, x + r * 1.4, y - r * 0.2, x, y + r * 0.85);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        });
+
+        n3Estado.bombasMapa.forEach(b => {
+            ctx.save();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.moveTo(b.x - 11, b.y - 17);
+            ctx.lineTo(b.x, b.y - 4);
+            ctx.moveTo(b.x + 11, b.y - 17);
+            ctx.lineTo(b.x, b.y - 4);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(255,255,255,0.88)';
+            ctx.beginPath();
+            ctx.arc(b.x, b.y - 17, 12, Math.PI, 0);
+            ctx.fill();
+
+            ctx.shadowColor = '#FFF52D';
+            ctx.shadowBlur = 16;
+            ctx.fillStyle = '#1b1b1b';
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, b.radio, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#FFF52D';
+            ctx.lineWidth = 2.2;
+            ctx.stroke();
+            ctx.restore();
+        });
+
+        n3Estado.proyectilesJugador.forEach(p => {
+            ctx.save();
+            ctx.shadowColor = '#ff9f1c';
+            ctx.shadowBlur = 18;
+            ctx.fillStyle = '#ff5400';
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radio, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#FFF52D';
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radio * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        n3Estado.balasCanon.forEach(b => {
+            ctx.save();
+            ctx.shadowColor = '#ff0000';
+            ctx.shadowBlur = 20;
+            const gradBala = ctx.createRadialGradient(b.x - 8, b.y - 8, 4, b.x, b.y, b.radio);
+            gradBala.addColorStop(0, '#4a4e69');
+            gradBala.addColorStop(1, '#0b090a');
+            ctx.fillStyle = gradBala;
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, b.radio, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#ff1e1e';
+            ctx.lineWidth = 3.5;
+            ctx.stroke();
+            ctx.restore();
+        });
+
+        n3Estado.secuaces.forEach(sec => dibujarSecuazMiniGlobo(sec));
+        n3Estado.bolitasSecuaces.forEach(bol => {
+            ctx.save();
+            ctx.fillStyle = '#ff1e1e';
+            ctx.shadowColor = '#ff0000';
+            ctx.shadowBlur = 10;
+            ctx.beginPath();
+            ctx.arc(bol.x, bol.y, bol.radio, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        dibujarDirigibleYBufon();
+
+        n3Estado.explosiones.forEach(ex => {
+            ex.x += ex.vx;
+            ex.y += ex.vy;
+            ex.vida -= 0.03;
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, ex.vida);
+            ctx.fillStyle = ex.color;
+            ctx.fillRect(ex.x, ex.y, ex.tam, ex.tam);
+            ctx.restore();
+        });
+        n3Estado.explosiones = n3Estado.explosiones.filter(ex => ex.vida > 0);
+
+        dibujarJugadorConElitros();
+
+        const barW = 400, barH = 16;
+        const barX = (canvas.width - barW) / 2, barY = 12;
+        const pctVida = jefeN3.vida / jefeN3.vidaMax;
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 15, 15, 0.85)';
+        ctx.fillRect(barX, barY, barW, barH);
+        ctx.fillStyle = jefeN3.enFuria ? '#ff9f1c' : '#e63946';
+        ctx.fillRect(barX, barY, barW * pctVida, barH);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(barX, barY, barW, barH);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 11px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        const nombreJefe = jefeN3.enFuria ? 'BUFÓN FURIOSO' : 'BUFÓN DEL DIRIGIBLE';
+        ctx.fillText(`${nombreJefe}: ${jefeN3.vida} / ${jefeN3.vidaMax} HP`, canvas.width / 2, barY + 12);
+        ctx.restore();
+
+        if (textoContador !== '') {
+            ctx.save();
+            ctx.font = 'bold 54px "Courier New", monospace';
+            ctx.fillStyle = textoContador === 'GAME OVER' ? '#ff1e1e' : '#FFF52D';
+            ctx.shadowColor = '#000';
+            ctx.shadowBlur = 16;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(textoContador, canvas.width / 2, canvas.height / 2);
+            ctx.restore();
+        }
+    }
+
+    function bucleNivel3() {
+        if (!juegoActivo || nivelActual !== 3) return;
+        try {
+            actualizarNivel3();
+            actualizarAnimacionDerrotaN3();
+            dibujarEscenaNivel3();
+        } catch (err) {
+            console.error('Error en frame Nivel 3:', err);
+        }
+        animacionIdNivel3 = requestAnimationFrame(bucleNivel3);
+    }
+</script>
