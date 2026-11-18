@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-
+{% load static %}
 {% block content %}
 <style>
     .arcade-box { position: relative; background: #0d1b2a; border: 3px solid #d4af37; border-radius: 16px; padding: 2rem; text-align: center; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.45); max-width: 900px; margin: 2rem auto; color: #f8f9fa; }
@@ -40,6 +40,64 @@
     .corona-negra-icono {
         filter: brightness(0) invert(0) drop-shadow(0 0 2px #ffffff) drop-shadow(0 0 6px #ffffff);
         font-size: 0.95rem;
+    }
+    .btn-nivel-secreto {
+        display: none;
+        margin: 1.5rem auto 0 auto;
+        font-family: 'Courier New', monospace;
+        font-weight: bold;
+        font-size: 1.15rem;
+        padding: 1rem 2.2rem;
+        border-radius: 14px;
+        border: 2px solid #c77dff;
+        background: radial-gradient(circle at center, #3c096c 0%, #10002b 100%);
+        color: #f3d5ff;
+        cursor: pointer;
+        box-shadow: 0 0 20px rgba(199, 125, 255, 0.75);
+        letter-spacing: 1.5px;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn-nivel-secreto:hover {
+        transform: scale(1.05);
+        box-shadow: 0 0 30px rgba(224, 170, 255, 1);
+    }
+    .pantalla-negra.fullscreen-nivel4 {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        border-radius: 0 !important;
+        z-index: 9999 !important;
+        background: #03010a !important;
+    }
+    .pantalla-negra.fullscreen-nivel4 #juego-canvas {
+        width: 100vw !important;
+        height: 100vh !important;
+        border: none !important;
+    }
+    .pantalla-negra.fullscreen-nivel4 > div:first-child {
+        position: fixed;
+        top: 14px;
+        left: 20px;
+        right: 20px;
+        width: auto !important;
+        z-index: 10000;
+    }
+    .pantalla-negra.fullscreen-nivel4 .hud-juego {
+        position: fixed;
+        bottom: 14px;
+        left: 20px;
+        right: 20px;
+        width: auto !important;
+        z-index: 10000;
+        background: rgba(10, 4, 26, 0.65);
+        padding: 8px 16px;
+        border-radius: 10px;
+        border: 1px solid rgba(199, 125, 255, 0.4);
     }
 </style>
 
@@ -87,12 +145,20 @@
                 <span id="badge-nivel-3" style="visibility:hidden; color:#FFF52D; font-family:'Courier New',monospace; font-size:0.85rem; font-weight:bold; text-shadow:0 0 8px #FFF52D;">👑 COMPLETADO</span>
             </div>
         </div>
+        <button id="btn-nivel-4" class="btn-nivel-secreto" onclick="abrirNivel(4, false)">
+            🌌 NIVEL SECRETO: GALAXIA
+        </button>
     </div>
 
     <div class="pantalla-negra" id="pantalla-juego">
         <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 0.6rem; font-family: 'Courier New', monospace;">
             <span id="titulo-nivel-activo" style="color: #d4af37; font-weight: bold;">NIVEL 1</span>
+            <div style="display: flex; gap: 10px; align-items: center;">
+            <button id="btn-pausa-n4" class="btn-mini" onclick="alternarPausaNivel4()" style="display: none; border-color: #ffd60a; color: #ffd60a;">
+                ⏸ Pausa [P]
+            </button>
             <button class="btn-mini" onclick="volverAlMenu()">✕ Salir</button>
+        </div>
         </div>
         <canvas id="juego-canvas" width="800" height="440"></canvas>
         <div class="hud-juego">
@@ -152,6 +218,10 @@
         const badgeExtremo2 = document.getElementById('badge-extremo-2');
         if (btnExtremo2) btnExtremo2.style.display = copasGanadas[2] ? 'inline-block' : 'none';
         if (badgeExtremo2) badgeExtremo2.style.visibility = extremosGanados[2] ? 'visible' : 'hidden';
+        const btnNivel4 = document.getElementById('btn-nivel-4');
+        if (btnNivel4) {
+            btnNivel4.style.display = (total >= 3) ? 'inline-block' : 'none';
+        }
     }
 
     function ganarCopaJefe(nivel) {
@@ -861,13 +931,15 @@
             iniciarNivel2();
         } else if (nivel === 3 && typeof iniciarNivel3 === 'function') {
             iniciarNivel3();
+        } else if (nivel === 4 && typeof iniciarNivel4 === 'function') {
+            iniciarNivel4();
         } else {
             bucleJuego();
         }
         iniciarCuentaRegresiva();
     }
 
-    function volverAlMenu() {
+   function volverAlMenu() {
         juegoActivo = false;
         puedeMoverse = false;
         clearInterval(intervaloContador);
@@ -879,9 +951,19 @@
             cancelAnimationFrame(animacionIdNivel3);
             if (typeof restaurarCanvasNivel3 === 'function') restaurarCanvasNivel3();
         }
+        if (typeof animacionIdNivel4 !== 'undefined') {
+            cancelAnimationFrame(animacionIdNivel4);
+        }
+        if (typeof restaurarPantallaNivel4 === 'function') {
+            restaurarPantallaNivel4();
+        }
+        document.getElementById('pantalla-juego').style.display = 'none';
+        document.getElementById('menu-niveles').style.display = 'block';
     }
     actualizarTrofeosUI();
 </script>
+<audio id="musica-fase2-n4" src="{% static 'audio/Herald_of_the_Last_Gate.mp3' %}" loop preload="auto"></audio>
 {% include 'arcade_nivel2.html' %}
 {% include 'arcade_nivel3.html' %}
+{% include 'arcade_nivel4.html' %}
 {% endblock %}

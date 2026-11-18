@@ -1,62 +1,3198 @@
 <script>
     let animacionIdNivel4 = null;
+    let juegoPausadoN4 = false;
+    let inicioPausaN4 = 0;
+
+    let anguloGalaxiaN4 = 0;
+    let estrellasN4 = [];
+    let brazosGalaxiaN4 = [];
+    let estrellasFugacesN4 = [];
+    let nebulosasN4 = [];
+
+    // Jefes Fase 1 (550 HP cada uno) y Jefe Fusionado Fase 2 (2000 HP)
+    let serafinN4 = null;
+    let ophanimN4 = null;
+    let diosFusionadoN4 = null;
+    let faseActualN4 = 1;
+
+    // Escenarios dimensionales de Fase 2
+    // 'galaxia' -> 'infierno' (1500 HP) -> 'mar_japones' (1000 HP) -> 'tepuy' (500 HP) -> 'infierno' (200 HP)
+    let escenarioActualN4 = 'galaxia';
+    let umbralesPortalUsadosN4 = { 1500: false, 1000: false, 500: false, 200: false };
+    let portalDimensionalN4 = {
+        activo: false,
+        inicio: 0,
+        duracion: 2400,
+        destino: 'infierno',
+        cambiado: false
+    };
+
+    // Destello cegador (4 veces, cada 500 HP quitados)
+    let destelloCegadorN4 = {
+        activo: false,
+        fase: 'ninguna', // 'subiendo' | 'cegando'
+        inicio: 0,
+        alfaBlanco: 0
+    };
+
+    // Elementos animados de los fondos
+    let rayosInfiernoN4 = [];
+    let burbujasLavaN4 = [];
+    let nubesTepuyN4 = [];
+    let gotasMarN4 = [];
+
+    // Proyectiles, zonas, clones, corazones y partículas
+    let rayosDoradosN4 = [];
+    let agujerosNegrosN4 = [];
+    let clonesOphanimN4 = [];
+    let disparosJugadorN4 = [];
+    let corazonesCuracionN4 = [];
+    let particulasN4 = [];
+    let ultimoDisparoJugadorN4 = 0;
+    let ultimoSpawnCorazonN4 = 0;
+
+    // Audio de Fase 2
+    let audioCtxRespaldoN4 = null;
+    let intervaloMusicaRespaldoN4 = null;
+
+    // Sistema de Ataque Supremo y Choque de Poderes (Kamehameha vs Rayo Divino)
+    let choquePoderN4 = {
+        activo: false,
+        fase: 'ninguna',
+        inicioFase: 0,
+        duracionCarga: 1800,
+        duracionChoque: 9000,
+        pulsaciones: 0,
+        metaPulsaciones: 42,
+        progreso: 0.5,
+        ultimoSupremo: 0
+    };
+
+    // Cinemática de derrota Fase 1 -> Diálogo en negro -> Fusión en blanco -> Destello -> Fase 2
+    let cinematicaFase2N4 = {
+        activa: false,
+        etapa: 'ninguna',
+        inicioEtapa: 0,
+        textoCompleto: '¡NO, NO, NO, NO, NO! ¡ME NIEGO A SER DERROTADO! ¡YO SOY UN SER DE LUZ Y TÚ NADA, ERES SOLO UN GRANO DE ARROZ EN TODO EL UNIVERSO!... ¡ESTE NO ES NUESTRO FINAL, ESTE NO ES TU FINAL DE VICTORIA! ¡AQUÍ YO SOY TU DIOS!',
+        letrasMostradas: 0,
+        ultimoTickLetra: 0,
+        tiempoFinTexto: 0
+    };
+
+    // ==========================================
+    // CONTROL DE PAUSA Y MÚSICA DE FASE 2
+    // ==========================================
+    function alternarPausaNivel4() {
+        if (!juegoActivo || nivelActual !== 4 || jugador.vidas <= 0) return;
+        const ahora = Date.now();
+        const btnPausa = document.getElementById('btn-pausa-n4');
+        const audioEl = document.getElementById('musica-fase2-n4');
+
+        if (!juegoPausadoN4) {
+            juegoPausadoN4 = true;
+            inicioPausaN4 = ahora;
+            if (btnPausa) btnPausa.textContent = '▶ Reanudar [P]';
+            if (audioEl && !audioEl.paused) audioEl.pause();
+        } else {
+            const delta = ahora - inicioPausaN4;
+            desplazarTemporizadoresPorPausaN4(delta);
+            juegoPausadoN4 = false;
+            if (btnPausa) btnPausa.textContent = '⏸ Pausa [P]';
+            if (audioEl && faseActualN4 === 2 && diosFusionadoN4 && diosFusionadoN4.vida > 0) {
+                audioEl.play().catch(() => {});
+            }
+        }
+    }
+
+    function desplazarTemporizadoresPorPausaN4(delta) {
+        jugador.invulnerableHasta += delta;
+        ultimoDisparoJugadorN4 += delta;
+        ultimoSpawnCorazonN4 += delta;
+
+        if (serafinN4) {
+            serafinN4.danioFlashHasta += delta;
+            serafinN4.ultimoCambio += delta;
+            serafinN4.embestidaInicio += delta;
+        }
+        if (ophanimN4) {
+            ophanimN4.danioFlashHasta += delta;
+            ophanimN4.ultimoCambio += delta;
+        }
+        if (diosFusionadoN4) {
+            diosFusionadoN4.danioFlashHasta += delta;
+            diosFusionadoN4.ultimoCambio += delta;
+            diosFusionadoN4.embestidaInicio += delta;
+        }
+        if (choquePoderN4.activo) choquePoderN4.inicioFase += delta;
+        choquePoderN4.ultimoSupremo += delta;
+
+        if (cinematicaFase2N4.activa) {
+            cinematicaFase2N4.inicioEtapa += delta;
+            cinematicaFase2N4.ultimoTickLetra += delta;
+            if (cinematicaFase2N4.tiempoFinTexto > 0) cinematicaFase2N4.tiempoFinTexto += delta;
+        }
+        if (portalDimensionalN4.activo) portalDimensionalN4.inicio += delta;
+        if (destelloCegadorN4.activo) destelloCegadorN4.inicio += delta;
+
+        agujerosNegrosN4.forEach(ag => ag.creadoEn += delta);
+        clonesOphanimN4.forEach(cl => cl.creadoEn += delta);
+        corazonesCuracionN4.forEach(c => c.creadoEn += delta);
+    }
+
+    function iniciarMusicaFase2N4() {
+        const audioEl = document.getElementById('musica-fase2-n4');
+        if (audioEl) {
+            audioEl.currentTime = 0;
+            audioEl.volume = 0.75;
+            audioEl.loop = true;
+            const promesa = audioEl.play();
+            if (promesa !== undefined) {
+                promesa.catch(() => {
+                    iniciarMusicaRespaldoSintetizadaN4();
+                });
+            }
+        } else {
+            iniciarMusicaRespaldoSintetizadaN4();
+        }
+    }
+
+    function detenerMusicaFase2N4() {
+        const audioEl = document.getElementById('musica-fase2-n4');
+        if (audioEl) {
+            audioEl.pause();
+            audioEl.currentTime = 0;
+        }
+        if (intervaloMusicaRespaldoN4) {
+            clearInterval(intervaloMusicaRespaldoN4);
+            intervaloMusicaRespaldoN4 = null;
+        }
+    }
+
+    function iniciarMusicaRespaldoSintetizadaN4() {
+        if (intervaloMusicaRespaldoN4) return;
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            audioCtxRespaldoN4 = new AudioCtx();
+            const notas = [110, 130.81, 146.83, 155.56, 146.83, 130.81, 98, 103.83];
+            let paso = 0;
+            intervaloMusicaRespaldoN4 = setInterval(() => {
+                if (juegoPausadoN4 || !juegoActivo || nivelActual !== 4 || faseActualN4 !== 2) return;
+                if (diosFusionadoN4 && diosFusionadoN4.vida <= 0) return;
+                const osc = audioCtxRespaldoN4.createOscillator();
+                const gain = audioCtxRespaldoN4.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.value = notas[paso % notas.length];
+                gain.gain.setValueAtTime(0.06, audioCtxRespaldoN4.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtxRespaldoN4.currentTime + 0.28);
+                osc.connect(gain);
+                gain.connect(audioCtxRespaldoN4.destination);
+                osc.start();
+                osc.stop(audioCtxRespaldoN4.currentTime + 0.29);
+                paso++;
+            }, 260);
+        } catch (e) {}
+    }
+
+    // ==========================================
+    // CREACIÓN DE JEFES Y ESCENARIOS
+    // ==========================================
+    function crearJefesNivel4() {
+        const w = canvas.width;
+        const h = canvas.height;
+
+        serafinN4 = {
+            nombre: 'SERAFÍN',
+            x: w * 0.28,
+            y: h * 0.24,
+            radio: 42,
+            vx: 5.4,
+            vy: 4.3,
+            vida: 550,
+            vidaMax: 550,
+            danioFlashHasta: 0,
+            alasCerradas: false,
+            aleteo: 0,
+            estado: 'patrulla',
+            ultimoCambio: Date.now() + 1400,
+            embestidaFase: 'ninguna',
+            embestidaInicio: 0,
+            embestidaStartX: 0,
+            embestidaStartY: 0,
+            embestidaTargetX: 0,
+            embestidaTargetY: 0,
+            embestidaVx: 0,
+            embestidaVy: 0
+        };
+
+        ophanimN4 = {
+            nombre: 'OPHANIM',
+            x: w * 0.72,
+            y: h * 0.24,
+            radio: 40,
+            vx: -5.1,
+            vy: 4.7,
+            vida: 550,
+            vidaMax: 550,
+            danioFlashHasta: 0,
+            rotacionAnillos: 0,
+            estado: 'patrulla',
+            ultimoCambio: Date.now() + 2000
+        };
+
+        diosFusionadoN4 = null;
+    }
+
+    function crearDiosFusionadoFase2() {
+        const w = canvas.width;
+        const h = canvas.height;
+        const ahora = Date.now();
+
+        diosFusionadoN4 = {
+            nombre: 'DIOS ABISAL FUSIONADO',
+            x: w * 0.5,
+            y: h * 0.28,
+            radio: jugador.tam * 1.55,
+            vx: 6.2,
+            vy: 5.1,
+            vida: 2000,
+            vidaMax: 2000,
+            danioFlashHasta: 0,
+            aleteo: 0,
+            rotacionAnillos: 0,
+            alasCerradas: false,
+            alasExtendidasCegadoras: false,
+            estado: 'patrulla',
+            ultimoCambio: ahora + 1400,
+            indiceAtaque: 0,
+            embestidaFase: 'ninguna',
+            embestidaInicio: 0,
+            embestidasRestantes: 0,
+            embestidaStartX: 0,
+            embestidaStartY: 0,
+            embestidaTargetX: 0,
+            embestidaTargetY: 0,
+            embestidaVx: 0,
+            embestidaVy: 0
+        };
+    }
+
+    function inicializarCosmoNivel4() {
+        const w = canvas.width;
+        const h = canvas.height;
+
+        nebulosasN4 = [
+            { x: w * 0.22, y: h * 0.30, r: Math.max(w, h) * 0.34, c1: 'rgba(139, 92, 246, 0.22)', c2: 'rgba(30, 27, 75, 0)' },
+            { x: w * 0.78, y: h * 0.65, r: Math.max(w, h) * 0.38, c1: 'rgba(217, 70, 239, 0.16)', c2: 'rgba(15, 23, 42, 0)' },
+            { x: w * 0.52, y: h * 0.45, r: Math.max(w, h) * 0.45, c1: 'rgba(56, 189, 248, 0.12)', c2: 'rgba(0, 0, 0, 0)' }
+        ];
+
+        estrellasN4 = [];
+        const paletaEstrellas = ['#ffffff', '#bae6fd', '#e9d5ff', '#fef08a', '#fbcfe8'];
+        for (let i = 0; i < 320; i++) {
+            const capa = Math.random();
+            estrellasN4.push({
+                x: Math.random() * w,
+                y: Math.random() * h,
+                radio: capa < 0.65 ? (0.6 + Math.random() * 0.9) : (1.5 + Math.random() * 1.6),
+                velY: 0.2 + capa * 1.7,
+                velX: (Math.random() - 0.5) * 0.2,
+                alfa: 0.35 + capa * 0.65,
+                tinte: paletaEstrellas[Math.floor(Math.random() * paletaEstrellas.length)],
+                parpadeo: Math.random() * Math.PI * 2,
+                destelloCruz: capa > 0.92
+            });
+        }
+
+        brazosGalaxiaN4 = [];
+        const numBrazos = 5;
+        const puntosPorBrazo = 175;
+        for (let b = 0; b < numBrazos; b++) {
+            const offsetBrazo = (b * Math.PI * 2) / numBrazos;
+            for (let p = 0; p < puntosPorBrazo; p++) {
+                const t = p / puntosPorBrazo;
+                const radioBase = 18 + t * Math.min(w, h) * 0.56;
+                const giro = t * 3.8;
+                const dispersion = (Math.random() - 0.5) * (20 + t * 65);
+                brazosGalaxiaN4.push({
+                    anguloBase: offsetBrazo + giro + (Math.random() - 0.5) * 0.38,
+                    radio: radioBase + dispersion,
+                    tam: 1.0 + (1 - t) * 2.4 + Math.random() * 1.4,
+                    color: t < 0.2
+                        ? 'rgba(255, 251, 235, 0.9)'
+                        : (t < 0.52 ? 'rgba(216, 180, 254, 0.62)' : (t < 0.8 ? 'rgba(129, 140, 248, 0.45)' : 'rgba(56, 189, 248, 0.3)'))
+                });
+            }
+        }
+
+        estrellasFugacesN4 = [];
+
+        // Inicializar partículas ambientales para los otros 3 mundos
+        burbujasLavaN4 = [];
+        for (let i = 0; i < 45; i++) {
+            burbujasLavaN4.push({
+                x: Math.random() * w,
+                y: h * 0.72 + Math.random() * (h * 0.28),
+                r: 3 + Math.random() * 12,
+                fase: Math.random() * Math.PI * 2,
+                vel: 0.04 + Math.random() * 0.06
+            });
+        }
+
+        nubesTepuyN4 = [];
+        for (let i = 0; i < 24; i++) {
+            nubesTepuyN4.push({
+                x: Math.random() * (w + 300) - 150,
+                y: h * (0.06 + Math.random() * 0.34),
+                rx: 75 + Math.random() * 130,
+                ry: 28 + Math.random() * 45,
+                vel: 0.35 + Math.random() * 0.65,
+                alfa: 0.45 + Math.random() * 0.45
+            });
+        }
+
+        gotasMarN4 = [];
+        for (let i = 0; i < 90; i++) {
+            gotasMarN4.push({
+                x: Math.random() * w,
+                y: h * (0.15 + Math.random() * 0.65),
+                r: 1.5 + Math.random() * 3.2,
+                vx: 0.6 + Math.random() * 1.4,
+                vy: -0.5 + Math.random() * 1.0
+            });
+        }
+    }
+
+    function activarPantallaCompletaNivel4() {
+        const pantalla = document.getElementById('pantalla-juego');
+        if (pantalla) pantalla.classList.add('fullscreen-nivel4');
+
+        const btnPausa = document.getElementById('btn-pausa-n4');
+        if (btnPausa) {
+            btnPausa.style.display = 'inline-block';
+            btnPausa.textContent = '⏸ Pausa [P]';
+        }
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const elem = document.documentElement;
+        if (!document.fullscreenElement && elem.requestFullscreen) {
+            elem.requestFullscreen().catch(() => {});
+        }
+    }
+
+    function restaurarPantallaNivel4() {
+        detenerMusicaFase2N4();
+        juegoPausadoN4 = false;
+
+        const pantalla = document.getElementById('pantalla-juego');
+        if (pantalla) pantalla.classList.remove('fullscreen-nivel4');
+
+        const btnPausa = document.getElementById('btn-pausa-n4');
+        if (btnPausa) btnPausa.style.display = 'none';
+
+        canvas.width = 800;
+        canvas.height = 440;
+
+        if (document.fullscreenElement && document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+        }
+    }
+
+    window.addEventListener('resize', () => {
+        if (juegoActivo && nivelActual === 4) {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            jugador.x = Math.min(canvas.width - 12 - jugador.tam, jugador.x);
+            jugador.y = Math.min(canvas.height - 60 - jugador.tam, jugador.y);
+        }
+    });
+
+    window.addEventListener('keydown', e => {
+        if (!juegoActivo || nivelActual !== 4) return;
+
+        if (e.code === 'KeyP') {
+            e.preventDefault();
+            if (!e.repeat) alternarPausaNivel4();
+            return;
+        }
+
+        if (juegoPausadoN4) return;
+
+        if (e.code === 'Space') {
+            e.preventDefault();
+            if (e.repeat) return;
+
+            if (cinematicaFase2N4.activa) return;
+
+            if (choquePoderN4.activo && choquePoderN4.fase === 'choque') {
+                choquePoderN4.pulsaciones++;
+                generarExplosionDoradaN4(
+                    jugador.x + jugador.tam / 2,
+                    jugador.y,
+                    4,
+                    '#38bdf8'
+                );
+            } else if (!choquePoderN4.activo) {
+                dispararRayoNivel4();
+            }
+        }
+    });
+
+    function dispararRayoNivel4() {
+        if (!puedeMoverse || juegoPausadoN4 || jugador.vidas <= 0 || choquePoderN4.activo || cinematicaFase2N4.activa) return;
+        if (faseActualN4 === 1 && serafinN4.vida <= 0 && ophanimN4.vida <= 0) return;
+        if (faseActualN4 === 2 && (!diosFusionadoN4 || diosFusionadoN4.vida <= 0)) return;
+
+        const ahora = Date.now();
+        if (ahora - ultimoDisparoJugadorN4 < 115) return;
+        ultimoDisparoJugadorN4 = ahora;
+
+        disparosJugadorN4.push({
+            x: jugador.x + jugador.tam / 2,
+            y: jugador.y + jugador.tam / 2,
+            radio: 7,
+            vel: 15,
+            estela: []
+        });
+    }
+
+    function daniarJugadorNivel4(cantidad = 1) {
+        const ahora = Date.now();
+        if (ahora < jugador.invulnerableHasta || jugador.vidas <= 0 || cinematicaFase2N4.activa || juegoPausadoN4) return;
+        if (faseActualN4 === 1 && serafinN4.vida <= 0 && ophanimN4.vida <= 0) return;
+        if (faseActualN4 === 2 && (!diosFusionadoN4 || diosFusionadoN4.vida <= 0)) return;
+
+        jugador.vidas = Math.max(0, jugador.vidas - cantidad);
+        jugador.invulnerableHasta = ahora + 1200;
+        actualizarCorazonesUI();
+
+        if (jugador.vidas <= 0) {
+            puedeMoverse = false;
+            choquePoderN4.activo = false;
+            detenerMusicaFase2N4();
+            textoContador = 'GAME OVER';
+            document.getElementById('titulo-nivel-activo').textContent = 'NIVEL SECRETO — DERROTADO';
+        }
+    }
+
+    function generarExplosionDoradaN4(x, y, cantidad, color = '#ffd60a') {
+        for (let i = 0; i < cantidad; i++) {
+            const ang = Math.random() * Math.PI * 2;
+            const vel = 1.8 + Math.random() * 6.5;
+            particulasN4.push({
+                x, y,
+                vx: Math.cos(ang) * vel,
+                vy: Math.sin(ang) * vel,
+                tam: 3 + Math.random() * 5,
+                vida: 1.0,
+                color
+            });
+        }
+    }
+
+    function iniciarCinematicaTransicionFase2(ahora) {
+        cinematicaFase2N4.activa = true;
+        cinematicaFase2N4.etapa = 'explosion';
+        cinematicaFase2N4.inicioEtapa = ahora;
+        cinematicaFase2N4.letrasMostradas = 0;
+        cinematicaFase2N4.ultimoTickLetra = 0;
+        cinematicaFase2N4.tiempoFinTexto = 0;
+
+        choquePoderN4.activo = false;
+        rayosDoradosN4 = [];
+        agujerosNegrosN4 = [];
+        clonesOphanimN4 = [];
+        disparosJugadorN4 = [];
+
+        generarExplosionDoradaN4(serafinN4.x, serafinN4.y, 90, '#ffd60a');
+        generarExplosionDoradaN4(serafinN4.x, serafinN4.y, 50, '#ffffff');
+        generarExplosionDoradaN4(ophanimN4.x, ophanimN4.y, 90, '#ffd60a');
+        generarExplosionDoradaN4(ophanimN4.x, ophanimN4.y, 50, '#ffffff');
+    }
+
+    function activarFase2Nivel4(ahora) {
+        faseActualN4 = 2;
+        cinematicaFase2N4.activa = false;
+        cinematicaFase2N4.etapa = 'ninguna';
+
+        escenarioActualN4 = 'galaxia';
+        umbralesPortalUsadosN4 = { 1500: false, 1000: false, 500: false, 200: false };
+        portalDimensionalN4.activo = false;
+        destelloCegadorN4.activo = false;
+        destelloCegadorN4.alfaBlanco = 0;
+
+        jugador.vidasMax = 6;
+        jugador.vidas = 6;
+        jugador.invulnerableHasta = ahora + 1500;
+        actualizarCorazonesUI();
+        generarExplosionDoradaN4(jugador.x + jugador.tam / 2, jugador.y + jugador.tam / 2, 45, '#38bdf8');
+
+        crearDiosFusionadoFase2();
+        choquePoderN4.ultimoSupremo = ahora;
+        ultimoSpawnCorazonN4 = ahora;
+
+        // Arrancar canción de batalla en bucle infinito
+        iniciarMusicaFase2N4();
+
+        document.getElementById('titulo-nivel-activo').textContent = 'NIVEL SECRETO — FASE 2: EL DIOS FUSIONADO';
+        textoContador = '¡FASE 2!';
+        setTimeout(() => {
+            if (textoContador === '¡FASE 2!') textoContador = '';
+        }, 1600);
+    }
+
+    function iniciarPortalYDestelloCada500HPN4(ahora, nuevoEscenario) {
+        // 1. Abrir Portal Dimensional
+        portalDimensionalN4.activo = true;
+        portalDimensionalN4.inicio = ahora;
+        portalDimensionalN4.destino = nuevoEscenario;
+        portalDimensionalN4.cambiado = false;
+
+        // 2. Activar habilidad del Destello Cegador (vuela arriba al centro y extiende alas)
+        destelloCegadorN4.activo = true;
+        destelloCegadorN4.fase = 'subiendo';
+        destelloCegadorN4.inicio = ahora;
+        destelloCegadorN4.alfaBlanco = 0;
+
+        if (diosFusionadoN4) {
+            diosFusionadoN4.estado = 'patrulla';
+            diosFusionadoN4.alasCerradas = false;
+            diosFusionadoN4.alasExtendidasCegadoras = true;
+        }
+    }
+
+    function iniciarAtaqueSupremoN4(ahora) {
+        choquePoderN4.activo = true;
+        choquePoderN4.fase = 'cargando';
+        choquePoderN4.inicioFase = ahora;
+        choquePoderN4.pulsaciones = 0;
+        choquePoderN4.progreso = 0.5;
+
+        rayosDoradosN4 = [];
+        agujerosNegrosN4 = [];
+        clonesOphanimN4 = [];
+        disparosJugadorN4 = [];
+
+        if (faseActualN4 === 1 && serafinN4) {
+            serafinN4.estado = 'patrulla';
+            serafinN4.alasCerradas = false;
+        }
+        if (faseActualN4 === 2 && diosFusionadoN4) {
+            diosFusionadoN4.estado = 'patrulla';
+            diosFusionadoN4.alasCerradas = false;
+        }
+    }
 
     function iniciarNivel4() {
         cancelAnimationFrame(animacionIdNivel4);
-        canvas.width = 800;
-        canvas.height = 640;
+        detenerMusicaFase2N4();
+        juegoPausadoN4 = false;
+
+        activarPantallaCompletaNivel4();
+        inicializarCosmoNivel4();
+        crearJefesNivel4();
+
+        faseActualN4 = 1;
+        escenarioActualN4 = 'galaxia';
+        umbralesPortalUsadosN4 = { 1500: false, 1000: false, 500: false, 200: false };
+        portalDimensionalN4.activo = false;
+        destelloCegadorN4.activo = false;
+        destelloCegadorN4.alfaBlanco = 0;
+
+        rayosDoradosN4 = [];
+        agujerosNegrosN4 = [];
+        clonesOphanimN4 = [];
+        disparosJugadorN4 = [];
+        corazonesCuracionN4 = [];
+        particulasN4 = [];
+        rayosInfiernoN4 = [];
+        ultimoDisparoJugadorN4 = 0;
+        ultimoSpawnCorazonN4 = Date.now();
+
+        choquePoderN4.activo = false;
+        choquePoderN4.fase = 'ninguna';
+        choquePoderN4.ultimoSupremo = Date.now();
+
+        cinematicaFase2N4.activa = false;
+        cinematicaFase2N4.etapa = 'ninguna';
 
         jugador.x = (canvas.width - jugador.tam) / 2;
-        jugador.y = canvas.height - 85;
-        jugador.vidasMax = 3;
-        jugador.vidas = 3;
+        jugador.y = canvas.height - 115;
+        jugador.vidasMax = 6;
+        jugador.vidas = 6;
         jugador.invulnerableHasta = 0;
         actualizarCorazonesUI();
 
         const hudEnergia = document.getElementById('cargas-energia');
         if (hudEnergia) {
-            hudEnergia.textContent = '💀 NIVEL SECRETO';
-            hudEnergia.style.color = '#ff4d6d';
+            hudEnergia.textContent = '🚀 ATAQUE INFINITO [ESPACIO] (5 DMG)';
+            hudEnergia.style.color = '#38bdf8';
         }
 
         bucleNivel4();
     }
 
-    function bucleNivel4() {
-        if (!juegoActivo || nivelActual !== 4) return;
+    function actualizarLogicaNivel4() {
+        if (!puedeMoverse || jugador.vidas <= 0 || juegoPausadoN4) return;
+        const ahora = Date.now();
+        const w = canvas.width;
+        const h = canvas.height;
+        const jugCx = jugador.x + jugador.tam / 2;
+        const jugCy = jugador.y + jugador.tam / 2;
 
-        if (puedeMoverse) {
-            if (teclas.ArrowUp) jugador.y -= jugador.vel;
-            if (teclas.ArrowDown) jugador.y += jugador.vel;
-            if (teclas.ArrowLeft) jugador.x -= jugador.vel;
-            if (teclas.ArrowRight) jugador.x += jugador.vel;
+        // ==========================================
+        // CINEMÁTICA DE DERROTA -> DIÁLOGO -> FUSIÓN EN BLANCO -> DESTELLO
+        // ==========================================
+        if (cinematicaFase2N4.activa) {
+            particulasN4.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vida -= 0.022;
+            });
+            particulasN4 = particulasN4.filter(p => p.vida > 0);
 
-            jugador.x = Math.max(12, Math.min(canvas.width - 12 - jugador.tam, jugador.x));
-            jugador.y = Math.max(12, Math.min(canvas.height - 12 - jugador.tam, jugador.y));
+            const transcurrido = ahora - cinematicaFase2N4.inicioEtapa;
+
+            if (cinematicaFase2N4.etapa === 'explosion') {
+                if (transcurrido >= 1500) {
+                    cinematicaFase2N4.etapa = 'dialogo_negro';
+                    cinematicaFase2N4.inicioEtapa = ahora;
+                    cinematicaFase2N4.ultimoTickLetra = ahora;
+
+                    serafinN4.x = w * 0.5 - 125;
+                    serafinN4.y = h * 0.30;
+                    serafinN4.alasCerradas = false;
+
+                    ophanimN4.x = w * 0.5 + 125;
+                    ophanimN4.y = h * 0.30;
+                }
+            } else if (cinematicaFase2N4.etapa === 'dialogo_negro') {
+                if (cinematicaFase2N4.letrasMostradas < cinematicaFase2N4.textoCompleto.length) {
+                    if (ahora - cinematicaFase2N4.ultimoTickLetra >= 36) {
+                        cinematicaFase2N4.letrasMostradas++;
+                        cinematicaFase2N4.ultimoTickLetra = ahora;
+                        if (cinematicaFase2N4.letrasMostradas >= cinematicaFase2N4.textoCompleto.length) {
+                            cinematicaFase2N4.tiempoFinTexto = ahora;
+                        }
+                    }
+                } else {
+                    if (ahora - cinematicaFase2N4.tiempoFinTexto >= 1700) {
+                        cinematicaFase2N4.etapa = 'fusion_blanca';
+                        cinematicaFase2N4.inicioEtapa = ahora;
+                    }
+                }
+            } else if (cinematicaFase2N4.etapa === 'fusion_blanca') {
+                const prog = Math.min(1, transcurrido / 3200);
+                const cx = w * 0.5;
+                const cy = h * 0.35;
+                const radioOrbita = (1 - prog) * 145;
+                const anguloFusion = prog * Math.PI * 5;
+
+                serafinN4.x = cx - Math.cos(anguloFusion) * radioOrbita;
+                serafinN4.y = cy - Math.sin(anguloFusion) * radioOrbita * 0.45;
+                ophanimN4.x = cx + Math.cos(anguloFusion) * radioOrbita;
+                ophanimN4.y = cy + Math.sin(anguloFusion) * radioOrbita * 0.45;
+                ophanimN4.rotacionAnillos += 0.25;
+
+                if (Math.random() < 0.85) {
+                    generarExplosionDoradaN4(
+                        cx + (Math.random() - 0.5) * (60 + prog * 120),
+                        cy + (Math.random() - 0.5) * (60 + prog * 120),
+                        2,
+                        '#ffffff'
+                    );
+                }
+
+                if (transcurrido >= 3200) {
+                    cinematicaFase2N4.etapa = 'destello_blanco';
+                    cinematicaFase2N4.inicioEtapa = ahora;
+                }
+            } else if (cinematicaFase2N4.etapa === 'destello_blanco') {
+                if (transcurrido >= 1300) {
+                    activarFase2Nivel4(ahora);
+                }
+            }
+            return;
         }
 
-        // Lienzo vacío listo para diseñar el Nivel Secreto
-        ctx.fillStyle = '#07060a';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // ==========================================
+        // ACTUALIZAR PORTAL DIMENSIONAL Y DESTELLO CEGADOR (FASE 2)
+        // ==========================================
+        if (portalDimensionalN4.activo) {
+            const edadPortal = ahora - portalDimensionalN4.inicio;
+            if (!portalDimensionalN4.cambiado && edadPortal >= portalDimensionalN4.duracion * 0.5) {
+                escenarioActualN4 = portalDimensionalN4.destino;
+                portalDimensionalN4.cambiado = true;
+            }
+            if (edadPortal >= portalDimensionalN4.duracion) {
+                portalDimensionalN4.activo = false;
+            }
+        }
 
-        // Jugador
+        if (destelloCegadorN4.activo && diosFusionadoN4) {
+            const edadDestello = ahora - destelloCegadorN4.inicio;
+            if (destelloCegadorN4.fase === 'subiendo') {
+                // Vuela hacia el centro arriba del mapa y extiende sus 6 alas
+                diosFusionadoN4.x += (w * 0.5 - diosFusionadoN4.x) * 0.16;
+                diosFusionadoN4.y += (115 - diosFusionadoN4.y) * 0.16;
+                if (edadDestello >= 750) {
+                    destelloCegadorN4.fase = 'cegando';
+                    destelloCegadorN4.inicio = ahora;
+                    destelloCegadorN4.alfaBlanco = 1.0;
+                }
+            } else if (destelloCegadorN4.fase === 'cegando') {
+                // Ciega la pantalla de blanco puro 1.4s y luego desaparece poco a poco en 2.6s
+                if (edadDestello < 1400) {
+                    destelloCegadorN4.alfaBlanco = 1.0;
+                } else {
+                    const desvanecer = (edadDestello - 1400) / 2600;
+                    destelloCegadorN4.alfaBlanco = Math.max(0, 1.0 - desvanecer);
+                    if (destelloCegadorN4.alfaBlanco <= 0) {
+                        destelloCegadorN4.activo = false;
+                        destelloCegadorN4.fase = 'ninguna';
+                        diosFusionadoN4.alasExtendidasCegadoras = false;
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // APARICIÓN DE CORAZÓN CADA 20 SEGUNDOS PARA EL JUGADOR
+        // ==========================================
+        if (ahora - ultimoSpawnCorazonN4 >= 20000) {
+            ultimoSpawnCorazonN4 = ahora;
+            corazonesCuracionN4.push({
+                x: 110 + Math.random() * (w - 220),
+                y: h * 0.45 + Math.random() * (h * 0.35),
+                radio: 15,
+                creadoEn: ahora
+            });
+        }
+
+        corazonesCuracionN4 = corazonesCuracionN4.filter(c => {
+            if (Math.hypot(jugCx - c.x, jugCy - c.y) <= c.radio + jugador.tam * 0.55) {
+                if (jugador.vidas < jugador.vidasMax) {
+                    jugador.vidas = Math.min(jugador.vidasMax, jugador.vidas + 1);
+                    actualizarCorazonesUI();
+                }
+                generarExplosionDoradaN4(c.x, c.y, 28, '#f43f5e');
+                return false;
+            }
+            return (ahora - c.creadoEn) < 12000;
+        });
+
+        // ==========================================
+        // MODO CHOQUE DE PODERES SUPREMO (KAMEHAMEHA)
+        // ==========================================
+        if (choquePoderN4.activo) {
+            const targetJugX = w * 0.5 - jugador.tam / 2;
+            const targetJugY = h * 0.80 - jugador.tam / 2;
+            jugador.x += (targetJugX - jugador.x) * 0.14;
+            jugador.y += (targetJugY - jugador.y) * 0.14;
+
+            if (faseActualN4 === 1) {
+                serafinN4.x += (w * 0.5 - 52 - serafinN4.x) * 0.12;
+                serafinN4.y += (h * 0.21 - serafinN4.y) * 0.12;
+                ophanimN4.x += (w * 0.5 + 52 - ophanimN4.x) * 0.12;
+                ophanimN4.y += (h * 0.21 - ophanimN4.y) * 0.12;
+                serafinN4.aleteo += 0.28;
+                ophanimN4.rotacionAnillos += 0.12;
+            } else if (faseActualN4 === 2 && diosFusionadoN4) {
+                diosFusionadoN4.x += (w * 0.5 - diosFusionadoN4.x) * 0.12;
+                diosFusionadoN4.y += (h * 0.23 - diosFusionadoN4.y) * 0.12;
+                diosFusionadoN4.aleteo += 0.32;
+                diosFusionadoN4.rotacionAnillos += 0.15;
+            }
+
+            if (choquePoderN4.fase === 'cargando') {
+                if (ahora - choquePoderN4.inicioFase >= choquePoderN4.duracionCarga) {
+                    choquePoderN4.fase = 'choque';
+                    choquePoderN4.inicioFase = ahora;
+                }
+            } else if (choquePoderN4.fase === 'choque') {
+                const transcurrido = ahora - choquePoderN4.inicioFase;
+                const ratioTiempo = Math.min(1, transcurrido / choquePoderN4.duracionChoque);
+                const avanceJefes = ratioTiempo * choquePoderN4.metaPulsaciones;
+
+                const diferencia = (choquePoderN4.pulsaciones - avanceJefes) / (choquePoderN4.metaPulsaciones * 0.65);
+                choquePoderN4.progreso = Math.max(0.06, Math.min(0.94, 0.5 + diferencia * 0.5));
+
+                const origenJefesY = h * 0.22 + 42;
+                const origenJugY = jugador.y - 8;
+                const choqueY = origenJefesY + (origenJugY - origenJefesY) * choquePoderN4.progreso;
+                if (Math.random() < 0.75) {
+                    generarExplosionDoradaN4(
+                        w * 0.5 + (Math.random() - 0.5) * 28,
+                        choqueY,
+                        2,
+                        Math.random() > 0.5 ? '#38bdf8' : '#ffd60a'
+                    );
+                }
+
+                if (transcurrido >= choquePoderN4.duracionChoque) {
+                    choquePoderN4.activo = false;
+                    choquePoderN4.fase = 'ninguna';
+                    choquePoderN4.ultimoSupremo = ahora;
+
+                    if (choquePoderN4.pulsaciones >= choquePoderN4.metaPulsaciones) {
+                        if (faseActualN4 === 1) {
+                            serafinN4.vida = Math.max(0, serafinN4.vida - 120);
+                            ophanimN4.vida = Math.max(0, ophanimN4.vida - 120);
+                            serafinN4.danioFlashHasta = ahora + 350;
+                            ophanimN4.danioFlashHasta = ahora + 350;
+                            generarExplosionDoradaN4(w * 0.5, h * 0.21, 75, '#38bdf8');
+                        } else if (faseActualN4 === 2 && diosFusionadoN4) {
+                            diosFusionadoN4.vida = Math.max(0, diosFusionadoN4.vida - 220);
+                            diosFusionadoN4.danioFlashHasta = ahora + 350;
+                            generarExplosionDoradaN4(diosFusionadoN4.x, diosFusionadoN4.y, 90, '#38bdf8');
+                        }
+                    } else {
+                        generarExplosionDoradaN4(jugCx, jugCy, 55, '#ffd60a');
+                        daniarJugadorNivel4(2);
+                    }
+                }
+            }
+
+            particulasN4.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vida -= 0.032;
+            });
+            particulasN4 = particulasN4.filter(p => p.vida > 0);
+            return;
+        }
+
+        // Activar Ataque Supremo Conjunto cada 15s (Fase 1) o cada 18s (Fase 2)
+        if (faseActualN4 === 1 && serafinN4.vida > 0 && ophanimN4.vida > 0 && ahora - choquePoderN4.ultimoSupremo >= 15000) {
+            iniciarAtaqueSupremoN4(ahora);
+            return;
+        }
+        if (faseActualN4 === 2 && diosFusionadoN4 && diosFusionadoN4.vida > 0 && !destelloCegadorN4.activo && ahora - choquePoderN4.ultimoSupremo >= 18000) {
+            iniciarAtaqueSupremoN4(ahora);
+            return;
+        }
+
+        // Disparo continuo si el jugador mantiene ESPACIO
+        if (teclas['Space'] || teclas[' ']) {
+            dispararRayoNivel4();
+        }
+
+        // Disparos del jugador teledirigidos al objetivo vivo más cercano (5 de daño)
+        disparosJugadorN4 = disparosJugadorN4.filter(d => {
+            let objetivo = null;
+            let distMin = Infinity;
+            const candidatos = faseActualN4 === 1 ? [serafinN4, ophanimN4] : [diosFusionadoN4];
+
+            candidatos.forEach(j => {
+                if (j && j.vida > 0) {
+                    const dist = Math.hypot(j.x - d.x, j.y - d.y);
+                    if (dist < distMin) {
+                        distMin = dist;
+                        objetivo = j;
+                    }
+                }
+            });
+
+            if (!objetivo) return false;
+
+            d.estela.push({ x: d.x, y: d.y });
+            if (d.estela.length > 6) d.estela.shift();
+
+            const ang = Math.atan2(objetivo.y - d.y, objetivo.x - d.x);
+            d.x += Math.cos(ang) * d.vel;
+            d.y += Math.sin(ang) * d.vel;
+
+            if (Math.hypot(objetivo.x - d.x, objetivo.y - d.y) <= objetivo.radio + d.radio) {
+                objetivo.vida = Math.max(0, objetivo.vida - 5);
+                objetivo.danioFlashHasta = ahora + 90;
+                generarExplosionDoradaN4(d.x, d.y, 5, '#38bdf8');
+                if (objetivo.vida === 0) {
+                    generarExplosionDoradaN4(objetivo.x, objetivo.y, 65, '#ffd60a');
+                }
+                return false;
+            }
+            return true;
+        });
+
+        // ==========================================
+        // LÓGICA DE FASE 1
+        // ==========================================
+        if (faseActualN4 === 1) {
+            if (serafinN4.vida <= 0 && ophanimN4.vida <= 0 && !cinematicaFase2N4.activa) {
+                iniciarCinematicaTransicionFase2(ahora);
+                return;
+            }
+
+            if (serafinN4.vida > 0) {
+                serafinN4.aleteo += 0.22;
+                if (Math.hypot(jugCx - serafinN4.x, jugCy - serafinN4.y) < serafinN4.radio + jugador.tam * 0.42) {
+                    daniarJugadorNivel4(1);
+                }
+
+                if (serafinN4.estado === 'patrulla') {
+                    serafinN4.alasCerradas = false;
+                    serafinN4.x += serafinN4.vx;
+                    serafinN4.y += serafinN4.vy;
+
+                    if (serafinN4.x < 75 || serafinN4.x > w - 75) serafinN4.vx *= -1;
+                    if (serafinN4.y < 85 || serafinN4.y > h - 110) serafinN4.vy *= -1;
+
+                    if (Math.random() < 0.045) {
+                        const ang = Math.random() * Math.PI * 2;
+                        serafinN4.vx = Math.cos(ang) * 6.2;
+                        serafinN4.vy = Math.sin(ang) * 6.2;
+                    }
+
+                    if (ahora - serafinN4.ultimoCambio >= 2500) {
+                        serafinN4.ultimoCambio = ahora;
+                        if (Math.random() < 0.5) {
+                            serafinN4.estado = 'embestida';
+                            serafinN4.embestidaFase = 'apuntando';
+                            serafinN4.embestidaInicio = ahora;
+                            serafinN4.alasCerradas = true;
+                            serafinN4.embestidaStartX = serafinN4.x;
+                            serafinN4.embestidaStartY = serafinN4.y;
+                            serafinN4.embestidaTargetX = jugCx;
+                            serafinN4.embestidaTargetY = jugCy;
+                        } else {
+                            const angBase = Math.atan2(jugCy - serafinN4.y, jugCx - serafinN4.x);
+                            [-0.34, 0, 0.34].forEach(offset => {
+                                const a = angBase + offset;
+                                rayosDoradosN4.push({
+                                    x: serafinN4.x,
+                                    y: serafinN4.y,
+                                    vx: Math.cos(a) * 10.5,
+                                    vy: Math.sin(a) * 10.5,
+                                    angulo: a,
+                                    largo: 76,
+                                    ancho: 15
+                                });
+                            });
+                        }
+                    }
+                } else if (serafinN4.estado === 'embestida') {
+                    if (serafinN4.embestidaFase === 'apuntando') {
+                        serafinN4.embestidaStartX = serafinN4.x;
+                        serafinN4.embestidaStartY = serafinN4.y;
+                        serafinN4.embestidaTargetX = jugCx;
+                        serafinN4.embestidaTargetY = jugCy;
+
+                        if (ahora - serafinN4.embestidaInicio >= 1000) {
+                            const ang = Math.atan2(
+                                serafinN4.embestidaTargetY - serafinN4.embestidaStartY,
+                                serafinN4.embestidaTargetX - serafinN4.embestidaStartX
+                            );
+                            serafinN4.embestidaVx = Math.cos(ang) * 18.5;
+                            serafinN4.embestidaVy = Math.sin(ang) * 18.5;
+                            serafinN4.embestidaFase = 'cargando';
+                        }
+                    } else if (serafinN4.embestidaFase === 'cargando') {
+                        serafinN4.x += serafinN4.embestidaVx;
+                        serafinN4.y += serafinN4.embestidaVy;
+
+                        if (serafinN4.x <= 65 || serafinN4.x >= w - 65 ||
+                            serafinN4.y <= 75 || serafinN4.y >= h - 100) {
+                            serafinN4.x = Math.max(65, Math.min(w - 65, serafinN4.x));
+                            serafinN4.y = Math.max(75, Math.min(h - 100, serafinN4.y));
+                            serafinN4.alasCerradas = false;
+                            serafinN4.estado = 'patrulla';
+                            serafinN4.ultimoCambio = ahora;
+                        }
+                    }
+                }
+            }
+
+            if (ophanimN4.vida > 0) {
+                ophanimN4.rotacionAnillos += 0.075;
+                if (Math.hypot(jugCx - ophanimN4.x, jugCy - ophanimN4.y) < ophanimN4.radio + jugador.tam * 0.42) {
+                    daniarJugadorNivel4(1);
+                }
+
+                ophanimN4.x += ophanimN4.vx;
+                ophanimN4.y += ophanimN4.vy;
+                if (ophanimN4.x < 75 || ophanimN4.x > w - 75) ophanimN4.vx *= -1;
+                if (ophanimN4.y < 85 || ophanimN4.y > h - 110) ophanimN4.vy *= -1;
+
+                if (Math.random() < 0.045) {
+                    const ang = Math.random() * Math.PI * 2;
+                    ophanimN4.vx = Math.cos(ang) * 5.9;
+                    ophanimN4.vy = Math.sin(ang) * 5.9;
+                }
+
+                if (ahora - ophanimN4.ultimoCambio >= 3200) {
+                    ophanimN4.ultimoCambio = ahora;
+                    if (Math.random() < 0.5) {
+                        for (let i = 0; i < 2; i++) {
+                            agujerosNegrosN4.push({
+                                x: 110 + Math.random() * (w - 220),
+                                y: 110 + Math.random() * (h - 210),
+                                radio: jugador.tam * 1.5,
+                                creadoEn: ahora,
+                                tiempoAviso: 1000,
+                                duracionActiva: 1850
+                            });
+                        }
+                    } else {
+                        const posicionesLados = [
+                            { x: 60, y: h * (0.28 + Math.random() * 0.44) },
+                            { x: w - 60, y: h * (0.28 + Math.random() * 0.44) },
+                            { x: w * (0.25 + Math.random() * 0.5), y: 82 }
+                        ];
+                        posicionesLados.forEach(pos => {
+                            clonesOphanimN4.push({
+                                x: pos.x,
+                                y: pos.y,
+                                targetX: jugCx,
+                                targetY: jugCy,
+                                creadoEn: ahora,
+                                tiempoAviso: 2000,
+                                duracionTotal: 2550
+                            });
+                        });
+                    }
+                }
+            }
+        }
+
+        // ==========================================
+        // LÓGICA DE FASE 2: EL DIOS FUSIONADO (2000 HP)
+        // ==========================================
+        if (faseActualN4 === 2 && diosFusionadoN4) {
+            if (diosFusionadoN4.vida <= 0 && textoContador !== '¡DIOS SUPREMO VENCIDO!') {
+                puedeMoverse = false;
+                detenerMusicaFase2N4();
+                rayosDoradosN4 = [];
+                agujerosNegrosN4 = [];
+                clonesOphanimN4 = [];
+                destelloCegadorN4.activo = false;
+                generarExplosionDoradaN4(diosFusionadoN4.x, diosFusionadoN4.y, 130, '#ffd60a');
+                generarExplosionDoradaN4(diosFusionadoN4.x, diosFusionadoN4.y, 80, '#dc2626');
+                textoContador = '¡DIOS SUPREMO VENCIDO!';
+                document.getElementById('titulo-nivel-activo').textContent = 'NIVEL SECRETO — ¡LEYENDA CELESTIAL!';
+                return;
+            }
+
+            // Disparar Portales y Destellos Cegadores cada 500 HP perdidos (1500, 1000, 500, 200)
+            if (!umbralesPortalUsadosN4[1500] && diosFusionadoN4.vida <= 1500) {
+                umbralesPortalUsadosN4[1500] = true;
+                iniciarPortalYDestelloCada500HPN4(ahora, 'infierno');
+            } else if (!umbralesPortalUsadosN4[1000] && diosFusionadoN4.vida <= 1000) {
+                umbralesPortalUsadosN4[1000] = true;
+                iniciarPortalYDestelloCada500HPN4(ahora, 'mar_japones');
+            } else if (!umbralesPortalUsadosN4[500] && diosFusionadoN4.vida <= 500) {
+                umbralesPortalUsadosN4[500] = true;
+                iniciarPortalYDestelloCada500HPN4(ahora, 'tepuy');
+            } else if (!umbralesPortalUsadosN4[200] && diosFusionadoN4.vida <= 200) {
+                umbralesPortalUsadosN4[200] = true;
+                iniciarPortalYDestelloCada500HPN4(ahora, 'infierno');
+            }
+
+            if (diosFusionadoN4.vida > 0) {
+                diosFusionadoN4.aleteo += 0.25;
+                diosFusionadoN4.rotacionAnillos += 0.09;
+
+                if (Math.hypot(jugCx - diosFusionadoN4.x, jugCy - diosFusionadoN4.y) < diosFusionadoN4.radio + jugador.tam * 0.42) {
+                    daniarJugadorNivel4(1);
+                }
+
+                // Si está ejecutando el Destello Cegador en la cima, esperar a que termine de subir
+                if (destelloCegadorN4.activo && destelloCegadorN4.fase === 'subiendo') {
+                    return;
+                }
+
+                if (diosFusionadoN4.estado === 'patrulla') {
+                    diosFusionadoN4.alasCerradas = false;
+                    diosFusionadoN4.x += diosFusionadoN4.vx;
+                    diosFusionadoN4.y += diosFusionadoN4.vy;
+
+                    if (diosFusionadoN4.x < 95 || diosFusionadoN4.x > w - 95) diosFusionadoN4.vx *= -1;
+                    if (diosFusionadoN4.y < 105 || diosFusionadoN4.y > h - 125) diosFusionadoN4.vy *= -1;
+
+                    if (Math.random() < 0.05) {
+                        const ang = Math.random() * Math.PI * 2;
+                        diosFusionadoN4.vx = Math.cos(ang) * 6.8;
+                        diosFusionadoN4.vy = Math.sin(ang) * 6.8;
+                    }
+
+                    if (ahora - diosFusionadoN4.ultimoCambio >= 2300) {
+                        diosFusionadoN4.ultimoCambio = ahora;
+                        const tipo = diosFusionadoN4.indiceAtaque % 4;
+                        diosFusionadoN4.indiceAtaque++;
+
+                        if (tipo === 0) {
+                            // 1) 5 RAYOS OCULARES GIGANTES EN ABANICO
+                            const angBase = Math.atan2(jugCy - diosFusionadoN4.y, jugCx - diosFusionadoN4.x);
+                            [-0.48, -0.24, 0, 0.24, 0.48].forEach(offset => {
+                                const a = angBase + offset;
+                                rayosDoradosN4.push({
+                                    x: diosFusionadoN4.x,
+                                    y: diosFusionadoN4.y,
+                                    vx: Math.cos(a) * 11,
+                                    vy: Math.sin(a) * 11,
+                                    angulo: a,
+                                    largo: 84,
+                                    ancho: 16
+                                });
+                            });
+                        } else if (tipo === 1) {
+                            // 2) 5 AGUJEROS NEGROS SIMULTÁNEOS (1s de aviso)
+                            for (let i = 0; i < 5; i++) {
+                                agujerosNegrosN4.push({
+                                    x: 110 + Math.random() * (w - 220),
+                                    y: 110 + Math.random() * (h - 210),
+                                    radio: jugador.tam * 1.48,
+                                    creadoEn: ahora,
+                                    tiempoAviso: 1000,
+                                    duracionActiva: 1850
+                                });
+                            }
+                        } else if (tipo === 2) {
+                            // 3) RÁFAGA DE 7 EMBESTIDAS SEGUIDAS cubriendo el ojo con sus 6 alas
+                            diosFusionadoN4.estado = 'embestida';
+                            diosFusionadoN4.embestidaFase = 'apuntando';
+                            diosFusionadoN4.embestidaInicio = ahora;
+                            diosFusionadoN4.embestidasRestantes = 7;
+                            diosFusionadoN4.alasCerradas = true;
+                            diosFusionadoN4.embestidaStartX = diosFusionadoN4.x;
+                            diosFusionadoN4.embestidaStartY = diosFusionadoN4.y;
+                            diosFusionadoN4.embestidaTargetX = jugCx;
+                            diosFusionadoN4.embestidaTargetY = jugCy;
+                        } else {
+                            // 4) 3 CLONES en los bordes (2s de aviso)
+                            const posicionesLados = [
+                                { x: 65, y: h * (0.28 + Math.random() * 0.44) },
+                                { x: w - 65, y: h * (0.28 + Math.random() * 0.44) },
+                                { x: w * (0.25 + Math.random() * 0.5), y: 88 }
+                            ];
+                            posicionesLados.forEach(pos => {
+                                clonesOphanimN4.push({
+                                    x: pos.x,
+                                    y: pos.y,
+                                    targetX: jugCx,
+                                    targetY: jugCy,
+                                    creadoEn: ahora,
+                                    tiempoAviso: 2000,
+                                    duracionTotal: 2550,
+                                    esFusionado: true
+                                });
+                            });
+                        }
+                    }
+                } else if (diosFusionadoN4.estado === 'embestida') {
+                    if (diosFusionadoN4.embestidaFase === 'apuntando') {
+                        diosFusionadoN4.embestidaStartX = diosFusionadoN4.x;
+                        diosFusionadoN4.embestidaStartY = diosFusionadoN4.y;
+                        diosFusionadoN4.embestidaTargetX = jugCx;
+                        diosFusionadoN4.embestidaTargetY = jugCy;
+
+                        const tiempoAviso = diosFusionadoN4.embestidasRestantes === 7 ? 850 : 380;
+                        if (ahora - diosFusionadoN4.embestidaInicio >= tiempoAviso) {
+                            const ang = Math.atan2(
+                                diosFusionadoN4.embestidaTargetY - diosFusionadoN4.embestidaStartY,
+                                diosFusionadoN4.embestidaTargetX - diosFusionadoN4.embestidaStartX
+                            );
+                            diosFusionadoN4.embestidaVx = Math.cos(ang) * 21;
+                            diosFusionadoN4.embestidaVy = Math.sin(ang) * 21;
+                            diosFusionadoN4.embestidaFase = 'cargando';
+                        }
+                    } else if (diosFusionadoN4.embestidaFase === 'cargando') {
+                        diosFusionadoN4.x += diosFusionadoN4.embestidaVx;
+                        diosFusionadoN4.y += diosFusionadoN4.embestidaVy;
+
+                        if (diosFusionadoN4.x <= 80 || diosFusionadoN4.x >= w - 80 ||
+                            diosFusionadoN4.y <= 90 || diosFusionadoN4.y >= h - 115) {
+                            diosFusionadoN4.x = Math.max(80, Math.min(w - 80, diosFusionadoN4.x));
+                            diosFusionadoN4.y = Math.max(90, Math.min(h - 115, diosFusionadoN4.y));
+                            diosFusionadoN4.embestidasRestantes--;
+
+                            if (diosFusionadoN4.embestidasRestantes > 0) {
+                                // Encadena la siguiente embestida de las 7 seguidas
+                                diosFusionadoN4.embestidaFase = 'apuntando';
+                                diosFusionadoN4.embestidaInicio = ahora;
+                                diosFusionadoN4.embestidaStartX = diosFusionadoN4.x;
+                                diosFusionadoN4.embestidaStartY = diosFusionadoN4.y;
+                                diosFusionadoN4.embestidaTargetX = jugCx;
+                                diosFusionadoN4.embestidaTargetY = jugCy;
+                            } else {
+                                diosFusionadoN4.alasCerradas = false;
+                                diosFusionadoN4.estado = 'patrulla';
+                                diosFusionadoN4.ultimoCambio = ahora;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Rayos triples/quíntuples
+        rayosDoradosN4.forEach(r => {
+            r.x += r.vx;
+            r.y += r.vy;
+            const halfL = r.largo * 0.45;
+            const x1 = r.x - Math.cos(r.angulo) * halfL;
+            const y1 = r.y - Math.sin(r.angulo) * halfL;
+            const x2 = r.x + Math.cos(r.angulo) * halfL;
+            const y2 = r.y + Math.sin(r.angulo) * halfL;
+            if (distanciaPuntoSegmentoN4(jugCx, jugCy, x1, y1, x2, y2) < jugador.tam * 0.42 + r.ancho * 0.45) {
+                daniarJugadorNivel4(1);
+            }
+        });
+        rayosDoradosN4 = rayosDoradosN4.filter(r => r.x > -100 && r.x < w + 100 && r.y > -100 && r.y < h + 100);
+
+        // Agujeros negros
+        agujerosNegrosN4 = agujerosNegrosN4.filter(ag => {
+            const edad = ahora - ag.creadoEn;
+            if (edad >= ag.tiempoAviso) {
+                const dist = Math.hypot(jugCx - ag.x, jugCy - ag.y);
+                if (dist < ag.radio * 2.5 && dist > 5) {
+                    jugador.x += ((ag.x - jugCx) / dist) * 1.7;
+                    jugador.y += ((ag.y - jugCy) / dist) * 1.7;
+                }
+                if (dist <= ag.radio + jugador.tam * 0.3) {
+                    daniarJugadorNivel4(1);
+                }
+            }
+            return edad < (ag.tiempoAviso + ag.duracionActiva);
+        });
+
+        // Clones en los lados
+        clonesOphanimN4 = clonesOphanimN4.filter(cl => {
+            const edad = ahora - cl.creadoEn;
+            if (edad < cl.tiempoAviso - 400) {
+                cl.targetX = jugCx;
+                cl.targetY = jugCy;
+            } else if (edad >= cl.tiempoAviso) {
+                const ang = Math.atan2(cl.targetY - cl.y, cl.targetX - cl.x);
+                const ex = cl.x + Math.cos(ang) * 1800;
+                const ey = cl.y + Math.sin(ang) * 1800;
+                if (distanciaPuntoSegmentoN4(jugCx, jugCy, cl.x, cl.y, ex, ey) < jugador.tam * 0.42 + 8) {
+                    daniarJugadorNivel4(1);
+                }
+            }
+            return edad < cl.duracionTotal;
+        });
+
+        // Partículas
+        particulasN4.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vida -= 0.032;
+        });
+        particulasN4 = particulasN4.filter(p => p.vida > 0);
+    }
+
+    function distanciaPuntoSegmentoN4(px, py, x1, y1, x2, y2) {
+        const l2 = (x2 - x1) ** 2 + (y2 - y1) ** 2;
+        if (l2 === 0) return Math.hypot(px - x1, py - y1);
+        let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+        t = Math.max(0, Math.min(1, t));
+        return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+    }
+
+    // ==========================================
+    // ESCENARIO 1: CASTILLO INFERNAL DE LAVA ARDIENTE (DE FRENTE + TRUENOS)
+    // ==========================================
+    function dibujarFondoInfiernoNivel4(ahora) {
+        const w = canvas.width;
+        const h = canvas.height;
+        const t = ahora * 0.002;
+
+        // 1. Cielo tormentoso apocalíptico
+        const skyGrad = ctx.createLinearGradient(0, 0, 0, h * 0.72);
+        skyGrad.addColorStop(0, '#090204');
+        skyGrad.addColorStop(0.45, '#2b0907');
+        skyGrad.addColorStop(0.8, '#6b1409');
+        skyGrad.addColorStop(1, '#ea580c');
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        // Nubes de ceniza y humo en movimiento
+        for (let i = 0; i < 14; i++) {
+            const nx = ((i * 190 + t * 22) % (w + 300)) - 150;
+            const ny = 45 + (i % 4) * 42;
+            const nGrad = ctx.createRadialGradient(nx, ny, 10, nx, ny, 150);
+            nGrad.addColorStop(0, 'rgba(20, 8, 8, 0.85)');
+            nGrad.addColorStop(0.6, 'rgba(69, 10, 10, 0.45)');
+            nGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = nGrad;
+            ctx.beginPath();
+            ctx.arc(nx, ny, 150, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Relámpagos y truenos cayendo del cielo
+        if (!juegoPausadoN4 && Math.random() < 0.025 && rayosInfiernoN4.length < 2) {
+            const startX = w * (0.15 + Math.random() * 0.75);
+            const pts = [{ x: startX, y: 0 }];
+            let curX = startX;
+            let curY = 0;
+            while (curY < h * 0.65) {
+                curX += (Math.random() - 0.5) * 65;
+                curY += 28 + Math.random() * 35;
+                pts.push({ x: curX, y: curY });
+            }
+            rayosInfiernoN4.push({ puntos: pts, vida: 1.0 });
+        }
+
+        rayosInfiernoN4.forEach(rayo => {
+            if (!juegoPausadoN4) rayo.vida -= 0.08;
+            // Destello de trueno en el cielo
+            ctx.fillStyle = `rgba(216, 180, 254, ${rayo.vida * 0.16})`;
+            ctx.fillRect(0, 0, w, h);
+
+            ctx.save();
+            ctx.strokeStyle = `rgba(192, 132, 252, ${rayo.vida * 0.65})`;
+            ctx.lineWidth = 8;
+            ctx.beginPath();
+            rayo.puntos.forEach((pt, idx) => idx === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+            ctx.stroke();
+
+            ctx.strokeStyle = `rgba(255, 255, 255, ${rayo.vida})`;
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            rayo.puntos.forEach((pt, idx) => idx === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+            ctx.stroke();
+            ctx.restore();
+        });
+        rayosInfiernoN4 = rayosInfiernoN4.filter(r => r.vida > 0);
+
+        // 2. Montañas volcánicas escarpadas de fondo
+        ctx.fillStyle = '#1c0707';
+        ctx.beginPath();
+        ctx.moveTo(0, h * 0.74);
+        ctx.lineTo(w * 0.14, h * 0.48);
+        ctx.lineTo(w * 0.28, h * 0.65);
+        ctx.lineTo(w * 0.72, h * 0.62);
+        ctx.lineTo(w * 0.86, h * 0.42);
+        ctx.lineTo(w, h * 0.68);
+        ctx.lineTo(w, h);
+        ctx.lineTo(0, h);
+        ctx.closePath();
+        ctx.fill();
+
+        // Grietas de lava en las montañas
+        ctx.strokeStyle = '#f97316';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(w * 0.86, h * 0.45);
+        ctx.lineTo(w * 0.83, h * 0.58);
+        ctx.lineTo(w * 0.87, h * 0.72);
+        ctx.stroke();
+
+        // 3. FORTALEZA INFERNAL DE FRENTE (en el centro-izquierda/centro)
+        const cx = w * 0.5;
+        const baseY = h * 0.66;
+
+        // Isla de roca volcánica flotando sobre el mar de lava
+        ctx.fillStyle = '#18181b';
+        ctx.beginPath();
+        ctx.moveTo(cx - 210, baseY);
+        ctx.lineTo(cx + 210, baseY);
+        ctx.lineTo(cx + 150, baseY + 125);
+        ctx.lineTo(cx, baseY + 155);
+        ctx.lineTo(cx - 150, baseY + 125);
+        ctx.closePath();
+        ctx.fill();
+
+        // Torres laterales y torreón central del castillo
+        const torres = [
+            { x: cx - 155, y: baseY - 120, w: 58, h: 120 },
+            { x: cx + 97, y: baseY - 120, w: 58, h: 120 },
+            { x: cx - 105, y: baseY - 165, w: 52, h: 165 },
+            { x: cx + 53, y: baseY - 165, w: 52, h: 165 },
+            { x: cx - 48, y: baseY - 215, w: 96, h: 215 }
+        ];
+
+        torres.forEach(tr => {
+            const tGrad = ctx.createLinearGradient(tr.x, tr.y, tr.x + tr.w, tr.y);
+            tGrad.addColorStop(0, '#09090b');
+            tGrad.addColorStop(0.5, '#27272a');
+            tGrad.addColorStop(1, '#7c2d12');
+            ctx.fillStyle = tGrad;
+            ctx.fillRect(tr.x, tr.y, tr.w, tr.h);
+
+            // Almenas iluminadas por abajo con luz naranja de lava
+            ctx.fillStyle = '#ea580c';
+            ctx.fillRect(tr.x - 5, tr.y - 10, tr.w + 10, 12);
+            ctx.fillStyle = '#18181b';
+            ctx.fillRect(tr.x - 5, tr.y - 14, tr.w + 10, 8);
+        });
+
+        // Muralla frontal y cabeza dracónica central iluminada con magma
+        ctx.fillStyle = '#1f191a';
+        ctx.fillRect(cx - 135, baseY - 88, 270, 88);
+
+        // Puerta central con fauces ardientes
+        const puertaGrad = ctx.createLinearGradient(cx, baseY - 72, cx, baseY);
+        puertaGrad.addColorStop(0, '#fef08a');
+        puertaGrad.addColorStop(0.5, '#f97316');
+        puertaGrad.addColorStop(1, '#7f1d1d');
+        ctx.fillStyle = puertaGrad;
+        ctx.beginPath();
+        ctx.arc(cx, baseY - 42, 28, Math.PI, 0);
+        ctx.lineTo(cx + 28, baseY);
+        ctx.lineTo(cx - 28, baseY);
+        ctx.closePath();
+        ctx.fill();
+
+        // Cascadas de lava cayendo desde ambos lados del castillo hacia el abismo
+        [-82, 82].forEach(offsetX => {
+            const flujo = (ahora * 0.15) % 30;
+            const cascGrad = ctx.createLinearGradient(cx + offsetX, baseY - 12, cx + offsetX, baseY + 140);
+            cascGrad.addColorStop(0, '#fef08a');
+            cascGrad.addColorStop(0.5, '#f97316');
+            cascGrad.addColorStop(1, '#dc2626');
+            ctx.fillStyle = cascGrad;
+            ctx.fillRect(cx + offsetX - 11, baseY - 12, 22, 152);
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+            for (let y = baseY; y < baseY + 135; y += 30) {
+                ctx.fillRect(cx + offsetX - 4, y + flujo - 15, 8, 12);
+            }
+        });
+
+        // 4. MAR DE LAVA HIRVIENDO EN MOVIMIENTO EN LA PARTE INFERIOR
+        const lavaTop = h * 0.74;
+        const lavaGrad = ctx.createLinearGradient(0, lavaTop, 0, h);
+        lavaGrad.addColorStop(0, '#f97316');
+        lavaGrad.addColorStop(0.3, '#dc2626');
+        lavaGrad.addColorStop(0.75, '#991b1b');
+        lavaGrad.addColorStop(1, '#450a0a');
+        ctx.fillStyle = lavaGrad;
+        ctx.fillRect(0, lavaTop, w, h - lavaTop);
+
+        // Olas de magma incandescentes en movimiento horizontal
+        for (let fila = 0; fila < 5; fila++) {
+            const yFila = lavaTop + fila * ((h - lavaTop) / 5);
+            ctx.strokeStyle = fila % 2 === 0 ? '#fef08a' : '#fb923c';
+            ctx.lineWidth = 3.5 - fila * 0.4;
+            ctx.beginPath();
+            for (let x = 0; x <= w; x += 24) {
+                const waveY = yFila + Math.sin(x * 0.018 + t * (2.2 + fila * 0.4) + fila) * 6;
+                if (x === 0) ctx.moveTo(x, waveY);
+                else ctx.lineTo(x, waveY);
+            }
+            ctx.stroke();
+        }
+
+        // Burbujas de lava hirviendo
+        burbujasLavaN4.forEach(b => {
+            if (!juegoPausadoN4) b.fase += b.vel;
+            const pulso = Math.max(0, Math.sin(b.fase));
+            ctx.fillStyle = `rgba(254, 240, 138, ${pulso * 0.85})`;
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, b.r * pulso, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // Puente de piedra volcánica en primer plano hacia el castillo
+        ctx.fillStyle = '#27272a';
+        ctx.strokeStyle = '#f97316';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx - 24, baseY);
+        ctx.lineTo(cx + 24, baseY);
+        ctx.lineTo(cx + 95, h);
+        ctx.lineTo(cx - 95, h);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+    }
+
+    // ==========================================
+    // ESCENARIO 2: MAR ABIERTO ESTILO ESTAMPA JAPONESA (SIN TIERRA)
+    // ==========================================
+    function dibujarFondoMarJaponesNivel4(ahora) {
+        const w = canvas.width;
+        const h = canvas.height;
+        const t = ahora * 0.0022;
+
+        // 1. Cielo pergamino estilo Ukiyo-e
+        const skyGrad = ctx.createLinearGradient(0, 0, 0, h * 0.72);
+        skyGrad.addColorStop(0, '#e7d7be');
+        skyGrad.addColorStop(0.55, '#d6c3a5');
+        skyGrad.addColorStop(0.85, '#9ca3af');
+        skyGrad.addColorStop(1, '#4b5563');
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        // Bandas de nubes estilizadas japonesas
+        ctx.fillStyle = 'rgba(245, 238, 224, 0.55)';
+        ctx.beginPath();
+        ctx.ellipse(w * 0.25 + Math.sin(t * 0.4) * 20, h * 0.18, 170, 26, 0, 0, Math.PI * 2);
+        ctx.ellipse(w * 0.72 - Math.sin(t * 0.4) * 20, h * 0.26, 210, 32, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 2. Múltiples capas de olas gigantes sin tierra a la vista
+        const capasOlas = [
+            { yBase: h * 0.48, amp: 26, freq: 0.009, vel: 1.4, color: '#1e3a8a', espuma: '#f8fafc' },
+            { yBase: h * 0.58, amp: 34, freq: 0.0075, vel: -1.8, color: '#0f294a', espuma: '#e0f2fe' },
+            { yBase: h * 0.69, amp: 42, freq: 0.0065, vel: 2.3, color: '#1d4ed8', espuma: '#ffffff' },
+            { yBase: h * 0.82, amp: 32, freq: 0.0085, vel: -2.7, color: '#081c3a', espuma: '#f8fafc' }
+        ];
+
+        capasOlas.forEach((capa, idx) => {
+            ctx.save();
+            ctx.fillStyle = capa.color;
+            ctx.strokeStyle = '#09152b';
+            ctx.lineWidth = 2.5;
+
+            ctx.beginPath();
+            ctx.moveTo(0, h);
+            for (let x = 0; x <= w + 20; x += 18) {
+                const y = capa.yBase +
+                    Math.sin(x * capa.freq + t * capa.vel + idx) * capa.amp +
+                    Math.cos(x * capa.freq * 2.1 - t * capa.vel * 1.3) * (capa.amp * 0.35);
+                ctx.lineTo(x, y);
+            }
+            ctx.lineTo(w, h);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Franjas internas azul cian características del grabado japonés
+            ctx.strokeStyle = '#60a5fa';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let x = 0; x <= w; x += 22) {
+                const y = capa.yBase + 16 + Math.sin(x * capa.freq + t * capa.vel + idx) * capa.amp;
+                if (x === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // Garras de espuma blanca en las crestas más altas
+            for (let x = 40; x < w - 40; x += 140) {
+                const crestX = x + Math.sin(t * 1.5 + idx) * 25;
+                const crestY = capa.yBase + Math.sin(crestX * capa.freq + t * capa.vel + idx) * capa.amp;
+
+                ctx.fillStyle = capa.espuma;
+                ctx.strokeStyle = '#0f172a';
+                ctx.lineWidth = 1.4;
+                for (let g = -2; g <= 2; g++) {
+                    ctx.beginPath();
+                    ctx.arc(crestX + g * 11, crestY - Math.abs(g) * 2, 7.5 - Math.abs(g), 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                }
+            }
+            ctx.restore();
+        });
+
+        // 3. Gran Ola Arqueada Estilo Kanagawa en el costado izquierdo
+        const pulsoGranOla = Math.sin(t * 1.6) * 14;
         ctx.save();
-        ctx.shadowColor = '#4d82bc';
-        ctx.shadowBlur = 14;
-        ctx.fillStyle = '#4d82bc';
-        ctx.fillRect(jugador.x, jugador.y, jugador.tam, jugador.tam);
+        ctx.translate(w * 0.16 + pulsoGranOla, h * 0.44);
+
+        ctx.fillStyle = '#0c2340';
+        ctx.strokeStyle = '#09152b';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-140, 220);
+        ctx.quadraticCurveTo(-90, -40, 40, -110);
+        ctx.quadraticCurveTo(110, -135, 135, -75);
+        ctx.quadraticCurveTo(45, -75, 25, 20);
+        ctx.quadraticCurveTo(15, 120, 90, 220);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Garras de espuma blanca en la cresta de la Gran Ola
+        ctx.fillStyle = '#ffffff';
+        for (let c = 0; c < 9; c++) {
+            const gx = 35 + c * 14;
+            const gy = -108 + Math.pow(c - 4, 2) * 3.2;
+            ctx.beginPath();
+            ctx.arc(gx, gy, 11 - c * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
         ctx.restore();
 
+        // 4. Rocío marino volando por el aire
+        gotasMarN4.forEach(g => {
+            if (!juegoPausadoN4) {
+                g.x += g.vx;
+                g.y += g.vy + Math.sin(t + g.x * 0.02) * 0.4;
+                if (g.x > w) g.x = 0;
+            }
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.beginPath();
+            ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    }
+
+    // ==========================================
+    // ESCENARIO 3: GRAN TEPUY MONUMENTAL ENTRE NUBES EN MOVIMIENTO
+    // ==========================================
+    function dibujarFondoTepuyNivel4(ahora) {
+        const w = canvas.width;
+        const h = canvas.height;
+
+        // 1. Cielo azul andino luminoso
+        const skyGrad = ctx.createLinearGradient(0, 0, 0, h * 0.65);
+        skyGrad.addColorStop(0, '#3b82f6');
+        skyGrad.addColorStop(0.55, '#93c5fd');
+        skyGrad.addColorStop(1, '#e0f2fe');
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        // Montañas lejanas azuladas en el horizonte
+        ctx.fillStyle = '#6488a8';
+        ctx.beginPath();
+        ctx.moveTo(0, h * 0.56);
+        ctx.lineTo(w * 0.25, h * 0.48);
+        ctx.lineTo(w * 0.65, h * 0.50);
+        ctx.lineTo(w * 0.90, h * 0.41);
+        ctx.lineTo(w, h * 0.46);
+        ctx.lineTo(w, h);
+        ctx.lineTo(0, h);
+        ctx.closePath();
+        ctx.fill();
+
+        // 2. GRAN TEPUY (MESETA MONUMENTAL DE PAREDES VERTICALES)
+        const tepuyX = w * 0.36;
+        const tepuyW = w * 0.48;
+        const cimaY = h * 0.28;
+        const baseParedY = h * 0.49;
+
+        // Pared vertical de roca arenisca oscura y rojiza
+        const rocaGrad = ctx.createLinearGradient(tepuyX, cimaY, tepuyX + tepuyW, cimaY);
+        rocaGrad.addColorStop(0, '#1e293b');
+        rocaGrad.addColorStop(0.28, '#334155');
+        rocaGrad.addColorStop(0.52, '#9a6b53');
+        rocaGrad.addColorStop(0.75, '#7c4d38');
+        rocaGrad.addColorStop(1, '#1e293b');
+        ctx.fillStyle = rocaGrad;
+
+        ctx.beginPath();
+        ctx.moveTo(tepuyX, cimaY + 8);
+        ctx.lineTo(tepuyX + tepuyW * 0.18, cimaY);
+        ctx.lineTo(tepuyX + tepuyW * 0.85, cimaY + 4);
+        ctx.lineTo(tepuyX + tepuyW, cimaY + 18);
+        ctx.lineTo(tepuyX + tepuyW * 0.96, baseParedY);
+        ctx.lineTo(tepuyX - 15, baseParedY + 12);
+        ctx.closePath();
+        ctx.fill();
+
+        // Grietas verticales y estratos de la roca del Tepuy
+        for (let i = 1; i < 18; i++) {
+            const gx = tepuyX + (tepuyW / 18) * i;
+            ctx.strokeStyle = i % 2 === 0 ? 'rgba(15, 23, 42, 0.55)' : 'rgba(214, 158, 128, 0.35)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(gx, cimaY + 6);
+            ctx.lineTo(gx + (i % 3 - 1) * 6, baseParedY);
+            ctx.stroke();
+        }
+
+        // 3. Laderas y valles verdes exuberantes debajo del Tepuy
+        const valleGrad = ctx.createLinearGradient(0, baseParedY - 10, 0, h);
+        valleGrad.addColorStop(0, '#4d7c0f');
+        valleGrad.addColorStop(0.45, '#3f6212');
+        valleGrad.addColorStop(1, '#1a2e05');
+        ctx.fillStyle = valleGrad;
+        ctx.beginPath();
+        ctx.moveTo(0, h * 0.52);
+        ctx.quadraticCurveTo(tepuyX, baseParedY - 15, tepuyX + tepuyW * 0.6, baseParedY + 8);
+        ctx.lineTo(w, h * 0.56);
+        ctx.lineTo(w, h);
+        ctx.lineTo(0, h);
+        ctx.closePath();
+        ctx.fill();
+
+        // Textura de bosque y colinas verdes
+        for (let c = 0; c < 26; c++) {
+            const bx = (c * 97) % w;
+            const by = h * 0.56 + ((c * 53) % (h * 0.38));
+            ctx.fillStyle = c % 2 === 0 ? 'rgba(101, 163, 13, 0.42)' : 'rgba(20, 83, 45, 0.45)';
+            ctx.beginPath();
+            ctx.ellipse(bx, by, 65, 22, -0.15, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Sendero rocoso en la esquina inferior derecha (primer plano)
+        ctx.fillStyle = '#365314';
+        ctx.beginPath();
+        ctx.moveTo(w * 0.58, h);
+        ctx.quadraticCurveTo(w * 0.72, h * 0.74, w, h * 0.78);
+        ctx.lineTo(w, h);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.strokeStyle = '#d6d3d1';
+        ctx.lineWidth = 7;
+        ctx.beginPath();
+        ctx.moveTo(w * 0.68, h);
+        ctx.quadraticCurveTo(w * 0.76, h * 0.85, w * 0.92, h * 0.81);
+        ctx.stroke();
+
+        // 4. NUBES DENSAS EN MOVIMIENTO CONTINUO ABRAZANDO EL TEPUY
+        nubesTepuyN4.forEach(nb => {
+            if (!juegoPausadoN4) {
+                nb.x += nb.vel;
+                if (nb.x - nb.rx > w + 120) nb.x = -nb.rx - 120;
+            }
+            const cGrad = ctx.createRadialGradient(nb.x, nb.y - 8, 8, nb.x, nb.y, nb.rx);
+            cGrad.addColorStop(0, `rgba(255, 255, 255, ${nb.alfa})`);
+            cGrad.addColorStop(0.65, `rgba(241, 245, 249, ${nb.alfa * 0.7})`);
+            cGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = cGrad;
+            ctx.beginPath();
+            ctx.ellipse(nb.x, nb.y, nb.rx, nb.ry, 0, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    }
+
+    // ==========================================
+    // SELECTOR DE ESCENARIO Y PORTAL DIMENSIONAL
+    // ==========================================
+    function dibujarEscenarioActivoNivel4(ahora) {
+        if (escenarioActualN4 === 'infierno') {
+            dibujarFondoInfiernoNivel4(ahora);
+        } else if (escenarioActualN4 === 'mar_japones') {
+            dibujarFondoMarJaponesNivel4(ahora);
+        } else if (escenarioActualN4 === 'tepuy') {
+            dibujarFondoTepuyNivel4(ahora);
+        } else {
+            dibujarFondoGalaxiaNivel4();
+        }
+    }
+
+    function dibujarPortalDimensionalN4(ahora) {
+        if (!portalDimensionalN4.activo) return;
+        const w = canvas.width;
+        const h = canvas.height;
+        const cx = diosFusionadoN4 ? diosFusionadoN4.x : w * 0.5;
+        const cy = diosFusionadoN4 ? diosFusionadoN4.y : h * 0.35;
+        const prog = Math.min(1, (ahora - portalDimensionalN4.inicio) / portalDimensionalN4.duracion);
+        const apertura = Math.sin(prog * Math.PI); // Abre al máximo a la mitad y luego se cierra
+        const radioMax = Math.max(w, h) * 0.95 * apertura;
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(prog * 8);
+
+        const pGrad = ctx.createRadialGradient(0, 0, 5, 0, 0, Math.max(15, radioMax));
+        pGrad.addColorStop(0, '#ffffff');
+        pGrad.addColorStop(0.25, '#c084fc');
+        pGrad.addColorStop(0.6, '#4f46e5');
+        pGrad.addColorStop(0.88, '#020617');
+        pGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = pGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.max(15, radioMax), 0, Math.PI * 2);
+        ctx.fill();
+
+        // Espiral del portal
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+        ctx.lineWidth = 4;
+        for (let b = 0; b < 6; b++) {
+            ctx.rotate(Math.PI / 3);
+            ctx.beginPath();
+            ctx.arc(0, 0, Math.max(12, radioMax * 0.45), 0, Math.PI * 1.2);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    function dibujarCorazonesCuracionN4(ahora) {
+        corazonesCuracionN4.forEach(c => {
+            const pulso = 1 + Math.sin(ahora * 0.008) * 0.14;
+            ctx.save();
+            ctx.translate(c.x, c.y);
+            ctx.scale(pulso, pulso);
+
+            // Halo rosado
+            const hGrad = ctx.createRadialGradient(0, 0, 2, 0, 0, 24);
+            hGrad.addColorStop(0, 'rgba(244, 63, 94, 0.75)');
+            hGrad.addColorStop(1, 'rgba(244, 63, 94, 0)');
+            ctx.fillStyle = hGrad;
+            ctx.beginPath();
+            ctx.arc(0, 0, 24, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Forma de corazón
+            ctx.fillStyle = '#f43f5e';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 10);
+            ctx.bezierCurveTo(-16, -2, -16, -14, 0, -6);
+            ctx.bezierCurveTo(16, -14, 16, -2, 0, 10);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        });
+    }
+
+    // ==========================================
+    // SILUETAS BLANCAS, DIÁLOGO DE IRA Y CINEMÁTICA DE FUSIÓN
+    // ==========================================
+    function dibujarSiluetaBlancaSerafinN4(x, y, escala = 1) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(escala, escala);
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#ffffff';
+
+        for (let i = 0; i < 12; i++) {
+            const a = (i * Math.PI * 2) / 12;
+            const largoEspina = i % 2 === 0 ? 48 : 34;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(a - 0.08) * 20, Math.sin(a - 0.08) * 20);
+            ctx.lineTo(Math.cos(a) * largoEspina, Math.sin(a) * largoEspina);
+            ctx.lineTo(Math.cos(a + 0.08) * 20, Math.sin(a + 0.08) * 20);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        const paresAlas = [
+            { angBase: -0.62, largo: 78, ancho: 22 },
+            { angBase: 0.04, largo: 90, ancho: 25 },
+            { angBase: 0.68, largo: 68, ancho: 19 }
+        ];
+        paresAlas.forEach(par => {
+            [-1, 1].forEach(lado => {
+                ctx.save();
+                ctx.scale(lado, 1);
+                ctx.rotate(par.angBase);
+                ctx.beginPath();
+                ctx.moveTo(10, -4);
+                ctx.quadraticCurveTo(par.largo * 0.5, -par.ancho * 1.15, par.largo, -8);
+                ctx.lineTo(par.largo * 0.84, 0);
+                ctx.lineTo(par.largo * 0.94, 8);
+                ctx.lineTo(par.largo * 0.72, 11);
+                ctx.lineTo(par.largo * 0.80, 18);
+                ctx.quadraticCurveTo(par.largo * 0.45, par.ancho * 0.75, 10, 10);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            });
+        });
+
+        ctx.beginPath();
+        ctx.arc(0, 0, 26, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    function dibujarSiluetaBlancaOphanimN4(x, y, radio, rotacion, escala = 1) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(escala, escala);
+        ctx.strokeStyle = '#ffffff';
+        ctx.fillStyle = '#ffffff';
+
+        const anillos = [
+            { rx: radio * 1.48, ry: radio * 0.56, rot: rotacion },
+            { rx: radio * 1.48, ry: radio * 0.56, rot: -rotacion * 1.15 + 1.05 },
+            { rx: radio * 0.58, ry: radio * 1.45, rot: rotacion * 0.9 + 2.1 },
+            { rx: radio * 1.18, ry: radio * 1.18, rot: -rotacion * 0.65 }
+        ];
+
+        anillos.forEach(an => {
+            ctx.save();
+            ctx.rotate(an.rot);
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, an.rx, an.ry, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        });
+
+        ctx.beginPath();
+        ctx.arc(0, 0, radio * 0.62, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    function dibujarTextoMultilineaCinematica(texto, x, y, maxWidth, lineHeight) {
+        const palabras = texto.split(' ');
+        let linea = '';
+        let posY = y;
+
+        for (let n = 0; n < palabras.length; n++) {
+            const pruebaLinea = linea + palabras[n] + ' ';
+            const ancho = ctx.measureText(pruebaLinea).width;
+            if (ancho > maxWidth && n > 0) {
+                ctx.fillText(linea.trim(), x, posY);
+                linea = palabras[n] + ' ';
+                posY += lineHeight;
+            } else {
+                linea = pruebaLinea;
+            }
+        }
+        ctx.fillText(linea.trim(), x, posY);
+    }
+
+    function dibujarCinematicaFase2N4(ahora) {
+        const w = canvas.width;
+        const h = canvas.height;
+        const transcurrido = ahora - cinematicaFase2N4.inicioEtapa;
+
+        if (cinematicaFase2N4.etapa === 'explosion') {
+            const alfaNegro = Math.min(1, transcurrido / 1350);
+            ctx.save();
+            ctx.fillStyle = `rgba(0, 0, 0, ${alfaNegro})`;
+            ctx.fillRect(0, 0, w, h);
+            ctx.restore();
+
+            particulasN4.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, p.vida);
+                ctx.fillStyle = p.color || '#ffd60a';
+                ctx.fillRect(p.x - p.tam / 2, p.y - p.tam / 2, p.tam, p.tam);
+                ctx.restore();
+            });
+        } else if (cinematicaFase2N4.etapa === 'dialogo_negro') {
+            ctx.save();
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, w, h);
+
+            dibujarSiluetaBlancaSerafinN4(serafinN4.x, serafinN4.y, 1);
+            dibujarSiluetaBlancaOphanimN4(ophanimN4.x, ophanimN4.y, ophanimN4.radio, ophanimN4.rotacionAnillos, 1);
+
+            const temblorX = (Math.random() - 0.5) * 11;
+            const temblorY = (Math.random() - 0.5) * 11;
+            const boxW = Math.min(780, w * 0.84);
+            const boxH = 175;
+            const boxX = (w - boxW) / 2 + temblorX;
+            const boxY = h * 0.56 + temblorY;
+
+            ctx.fillStyle = '#050505';
+            ctx.fillRect(boxX, boxY, boxW, boxH);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(boxX + 6, boxY + 6, boxW - 12, boxH - 12);
+
+            ctx.font = 'bold 14px "Courier New", monospace';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'left';
+            ctx.fillText('【 SERAFÍN & OPHANIM AL UNÍSONO 】', boxX + 22, boxY + 26);
+
+            const textoVisible = cinematicaFase2N4.textoCompleto.slice(0, cinematicaFase2N4.letrasMostradas);
+            ctx.font = 'bold 18px "Courier New", monospace';
+            ctx.fillStyle = '#ffffff';
+            dibujarTextoMultilineaCinematica(
+                textoVisible,
+                boxX + 22,
+                boxY + 56,
+                boxW - 44,
+                26
+            );
+
+            ctx.restore();
+        } else if (cinematicaFase2N4.etapa === 'fusion_blanca') {
+            const prog = Math.min(1, transcurrido / 3200);
+            const cx = w * 0.5;
+            const cy = h * 0.35;
+
+            ctx.save();
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, w, h);
+
+            for (let i = 0; i < 16; i++) {
+                const a = (i * Math.PI * 2) / 16 + prog * 4;
+                const largoRayo = 90 + prog * 260;
+                ctx.strokeStyle = `rgba(255, 255, 255, ${0.25 + prog * 0.6})`;
+                ctx.lineWidth = 2 + prog * 4;
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.lineTo(cx + Math.cos(a) * largoRayo, cy + Math.sin(a) * largoRayo);
+                ctx.stroke();
+            }
+
+            const escala = 1 + prog * 0.55;
+            dibujarSiluetaBlancaSerafinN4(serafinN4.x, serafinN4.y, escala);
+            dibujarSiluetaBlancaOphanimN4(ophanimN4.x, ophanimN4.y, ophanimN4.radio, ophanimN4.rotacionAnillos, escala);
+
+            const radioNucleo = prog * 130;
+            const fusGrad = ctx.createRadialGradient(cx, cy, 4, cx, cy, Math.max(10, radioNucleo));
+            fusGrad.addColorStop(0, '#ffffff');
+            fusGrad.addColorStop(0.6, 'rgba(255, 255, 255, 0.85)');
+            fusGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = fusGrad;
+            ctx.beginPath();
+            ctx.arc(cx, cy, Math.max(10, radioNucleo), 0, Math.PI * 2);
+            ctx.fill();
+
+            particulasN4.forEach(p => {
+                ctx.globalAlpha = Math.max(0, p.vida);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(p.x - p.tam / 2, p.y - p.tam / 2, p.tam, p.tam);
+            });
+            ctx.globalAlpha = 1;
+
+            ctx.font = 'bold 24px "Courier New", monospace';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.fillText('⚡ ¡FUSIÓN CELESTIAL ABSOLUTA! ⚡', cx, h * 0.72);
+            ctx.restore();
+        } else if (cinematicaFase2N4.etapa === 'destello_blanco') {
+            ctx.save();
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+            ctx.restore();
+        }
+    }
+
+    // ==========================================
+    // DIBUJO HIPERDETALLADO DEL JEFE FUSIONADO (FASE 2 - 3X TAMAÑO)
+    // ==========================================
+    function dibujarAlaPlumajeDetalladaN4(largo, ancho, golpeado, esCegador) {
+        const wingGrad = ctx.createLinearGradient(0, 0, largo, 0);
+        if (esCegador) {
+            wingGrad.addColorStop(0, '#ffffff');
+            wingGrad.addColorStop(1, '#fef08a');
+        } else {
+            wingGrad.addColorStop(0, golpeado ? '#38bdf8' : '#18181b');
+            wingGrad.addColorStop(0.55, golpeado ? '#bae6fd' : '#27272a');
+            wingGrad.addColorStop(1, golpeado ? '#ffffff' : '#09090b');
+        }
+
+        ctx.fillStyle = wingGrad;
+        ctx.strokeStyle = esCegador ? '#ffffff' : (golpeado ? '#ffffff' : '#d4d4d8');
+        ctx.lineWidth = 1.6;
+
+        ctx.beginPath();
+        ctx.moveTo(8, -5);
+        ctx.quadraticCurveTo(largo * 0.45, -ancho * 1.15, largo, -10);
+        const numPuntas = 7;
+        for (let i = 0; i < numPuntas; i++) {
+            const t = i / numPuntas;
+            const px = largo * (1 - t * 0.55);
+            const py = -6 + t * (ancho * 1.45);
+            ctx.lineTo(px + 10, py + 4);
+            ctx.lineTo(px - 6, py + 9);
+        }
+        ctx.quadraticCurveTo(largo * 0.35, ancho * 0.85, 8, 12);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.strokeStyle = golpeado || esCegador ? '#ffffff' : 'rgba(228, 228, 231, 0.55)';
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.moveTo(10, 0);
+        ctx.quadraticCurveTo(largo * 0.5, -ancho * 0.45, largo * 0.92, -6);
+        ctx.stroke();
+
+        for (let k = 1; k <= 14; k++) {
+            const frac = k / 15;
+            const bx = 12 + frac * (largo * 0.82);
+            const by = -frac * (ancho * 0.32);
+            ctx.beginPath();
+            ctx.moveTo(bx, by);
+            ctx.lineTo(bx + 12, by + ancho * 0.65);
+            ctx.stroke();
+        }
+    }
+
+    function dibujarDiosFusionadoN4(d, ahora) {
+        if (!d || d.vida <= 0) return;
+        const jugCx = jugador.x + jugador.tam / 2;
+        const jugCy = jugador.y + jugador.tam / 2;
+        const golpeado = ahora < d.danioFlashHasta;
+        const esCegador = d.alasExtendidasCegadoras;
+
+        ctx.save();
+        ctx.translate(d.x, d.y);
+
+        const auraExterior = ctx.createRadialGradient(0, 0, 18, 0, 0, esCegador ? 220 : 145);
+        auraExterior.addColorStop(0, esCegador ? '#ffffff' : (golpeado ? 'rgba(56, 189, 248, 0.7)' : 'rgba(220, 38, 38, 0.55)'));
+        auraExterior.addColorStop(0.45, esCegador ? 'rgba(255, 255, 255, 0.65)' : 'rgba(153, 27, 27, 0.28)');
+        auraExterior.addColorStop(0.78, 'rgba(24, 24, 27, 0.18)');
+        auraExterior.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = auraExterior;
+        ctx.beginPath();
+        ctx.arc(0, 0, esCegador ? 220 : 145, 0, Math.PI * 2);
+        ctx.fill();
+
+        for (let f = 0; f < 18; f++) {
+            const angLlama = (f * Math.PI * 2) / 18 + Math.sin(ahora * 0.005 + f) * 0.15;
+            const largoLlama = 58 + Math.sin(ahora * 0.012 + f * 1.7) * 16;
+            ctx.fillStyle = f % 2 === 0 ? 'rgba(220, 38, 38, 0.65)' : 'rgba(248, 113, 113, 0.45)';
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(angLlama - 0.14) * 24, Math.sin(angLlama - 0.14) * 24);
+            ctx.quadraticCurveTo(
+                Math.cos(angLlama + 0.18) * (largoLlama * 0.65),
+                Math.sin(angLlama + 0.18) * (largoLlama * 0.65),
+                Math.cos(angLlama) * largoLlama,
+                Math.sin(angLlama) * largoLlama
+            );
+            ctx.quadraticCurveTo(
+                Math.cos(angLlama - 0.18) * (largoLlama * 0.65),
+                Math.sin(angLlama - 0.18) * (largoLlama * 0.65),
+                Math.cos(angLlama + 0.14) * 24,
+                Math.sin(angLlama + 0.14) * 24
+            );
+            ctx.fill();
+        }
+
+        const batir = esCegador ? 0 : Math.sin(d.aleteo) * 0.18;
+        const factorCegador = esCegador ? 1.25 : 1.0;
+        const configuracionAlas = [
+            { angBase: -0.92 + batir, largo: 128 * factorCegador, ancho: 34 },
+            { angBase: 0.08 - batir * 0.85, largo: 136 * factorCegador, ancho: 36 },
+            { angBase: 1.05 + batir * 0.6, largo: 108 * factorCegador, ancho: 28 }
+        ];
+
+        configuracionAlas.forEach(par => {
+            [-1, 1].forEach(lado => {
+                ctx.save();
+                ctx.scale(lado, 1);
+                ctx.rotate(par.angBase);
+                dibujarAlaPlumajeDetalladaN4(par.largo, par.ancho, golpeado, esCegador);
+                ctx.restore();
+            });
+        });
+
+        const anillosFusion = [
+            { rx: 68, ry: 27, rot: d.rotacionAnillos, claro: false, ojos: 11 },
+            { rx: 68, ry: 27, rot: -d.rotacionAnillos * 1.15 + 1.05, claro: true, ojos: 11 },
+            { rx: 28, ry: 68, rot: d.rotacionAnillos * 0.9 + 2.1, claro: false, ojos: 11 },
+            { rx: 56, ry: 56, rot: -d.rotacionAnillos * 0.7 + 0.5, claro: true, ojos: 12 }
+        ];
+
+        anillosFusion.forEach(an => {
+            ctx.save();
+            ctx.rotate(an.rot);
+
+            ctx.strokeStyle = '#09090b';
+            ctx.lineWidth = 11;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, an.rx, an.ry, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.strokeStyle = golpeado ? '#00e5ff' : (an.claro ? '#d4d4d8' : '#27272a');
+            ctx.lineWidth = 7.5;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, an.rx, an.ry, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#f4f4f5';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, an.rx, an.ry, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            for (let k = 0; k < an.ojos; k++) {
+                const a = (k * Math.PI * 2) / an.ojos;
+                const ox = Math.cos(a) * an.rx;
+                const oy = Math.sin(a) * an.ry;
+
+                ctx.fillStyle = '#f4f4f5';
+                ctx.beginPath();
+                ctx.ellipse(ox, oy, 5.5, 3.5, a, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#09090b';
+                ctx.lineWidth = 1.1;
+                ctx.stroke();
+
+                ctx.fillStyle = k % 3 === 0 ? '#dc2626' : '#3f3f46';
+                ctx.beginPath();
+                ctx.arc(ox, oy, 2.3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#000000';
+                ctx.beginPath();
+                ctx.arc(ox, oy, 1.1, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        });
+
+        if (!d.alasCerradas) {
+            ctx.save();
+            ctx.fillStyle = '#18181b';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 31, 20, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            const escGrad = ctx.createRadialGradient(0, 0, 4, 0, 0, 27);
+            escGrad.addColorStop(0, '#ffffff');
+            escGrad.addColorStop(0.75, '#e4e4e7');
+            escGrad.addColorStop(1, '#7f1d1d');
+            ctx.fillStyle = escGrad;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 27, 17, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#f4f4f5';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            const angMirada = Math.atan2(jugCy - d.y, jugCx - d.x);
+            const px = Math.cos(angMirada) * 6.5;
+            const py = Math.sin(angMirada) * 4.2;
+
+            const irisGrad = ctx.createRadialGradient(px, py, 1, px, py, 11);
+            irisGrad.addColorStop(0, '#fca5a5');
+            irisGrad.addColorStop(0.5, '#71717a');
+            irisGrad.addColorStop(1, '#18181b');
+            ctx.fillStyle = irisGrad;
+            ctx.beginPath();
+            ctx.arc(px, py, 11, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            ctx.arc(px, py, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(px - 2.5, py - 2.5, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        } else {
+            [-1, 1].forEach(lado => {
+                ctx.save();
+                ctx.scale(lado, 1);
+                ctx.fillStyle = '#18181b';
+                ctx.strokeStyle = '#f4f4f5';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(0, -38);
+                ctx.quadraticCurveTo(44, -14, 36, 36);
+                ctx.lineTo(0, 28);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            });
+        }
+
+        ctx.restore();
+    }
+
+    // ==========================================
+    // DIBUJO DEL CHOQUE DE PODERES (KAMEHAMEHA)
+    // ==========================================
+    function dibujarChoquePoderesN4(ahora) {
+        if (!choquePoderN4.activo) return;
+        const w = canvas.width;
+        const h = canvas.height;
+        const cx = w * 0.5;
+        const jefesY = h * 0.22 + 40;
+        const jugY = jugador.y - 10;
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(2, 1, 10, 0.45)';
+        ctx.fillRect(0, 0, w, h);
+
+        const auraJefes = ctx.createRadialGradient(cx, jefesY, 10, cx, jefesY, 135);
+        auraJefes.addColorStop(0, '#ffffff');
+        auraJefes.addColorStop(0.35, faseActualN4 === 2 ? 'rgba(220, 38, 38, 0.85)' : 'rgba(255, 214, 10, 0.85)');
+        auraJefes.addColorStop(1, 'rgba(255, 214, 10, 0)');
+        ctx.fillStyle = auraJefes;
+        ctx.beginPath();
+        ctx.arc(cx, jefesY, 135, 0, Math.PI * 2);
+        ctx.fill();
+
+        const auraJug = ctx.createRadialGradient(cx, jugY, 8, cx, jugY, 85);
+        auraJug.addColorStop(0, '#ffffff');
+        auraJug.addColorStop(0.4, 'rgba(56, 189, 248, 0.85)');
+        auraJug.addColorStop(1, 'rgba(56, 189, 248, 0)');
+        ctx.fillStyle = auraJug;
+        ctx.beginPath();
+        ctx.arc(cx, jugY, 85, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (choquePoderN4.fase === 'cargando') {
+            ctx.font = 'bold 28px "Courier New", monospace';
+            ctx.fillStyle = '#ffd60a';
+            ctx.textAlign = 'center';
+            ctx.fillText('⚡ ¡ATAQUE SUPREMO DIVINO! ¡PREPÁRATE! ⚡', cx, h * 0.5);
+        } else if (choquePoderN4.fase === 'choque') {
+            const choqueY = jefesY + (jugY - jefesY) * choquePoderN4.progreso;
+            const vibracion = Math.sin(ahora * 0.08) * 5;
+
+            ctx.strokeStyle = faseActualN4 === 2 ? 'rgba(220, 38, 38, 0.5)' : 'rgba(255, 214, 10, 0.45)';
+            ctx.lineWidth = 58 + vibracion;
+            ctx.beginPath();
+            ctx.moveTo(cx, jefesY);
+            ctx.lineTo(cx, choqueY);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#ffd60a';
+            ctx.lineWidth = 30;
+            ctx.beginPath();
+            ctx.moveTo(cx, jefesY);
+            ctx.lineTo(cx, choqueY);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 12;
+            ctx.beginPath();
+            ctx.moveTo(cx, jefesY);
+            ctx.lineTo(cx, choqueY);
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+            ctx.lineWidth = 54 - vibracion;
+            ctx.beginPath();
+            ctx.moveTo(cx, jugY);
+            ctx.lineTo(cx, choqueY);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#00e5ff';
+            ctx.lineWidth = 30;
+            ctx.beginPath();
+            ctx.moveTo(cx, jugY);
+            ctx.lineTo(cx, choqueY);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 12;
+            ctx.beginPath();
+            ctx.moveTo(cx, jugY);
+            ctx.lineTo(cx, choqueY);
+            ctx.stroke();
+
+            const radioColision = 42 + Math.sin(ahora * 0.06) * 7;
+            const colGrad = ctx.createRadialGradient(cx, choqueY, 5, cx, choqueY, radioColision * 1.6);
+            colGrad.addColorStop(0, '#ffffff');
+            colGrad.addColorStop(0.5, '#fef08a');
+            colGrad.addColorStop(0.8, '#38bdf8');
+            colGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = colGrad;
+            ctx.beginPath();
+            ctx.arc(cx, choqueY, radioColision * 1.6, 0, Math.PI * 2);
+            ctx.fill();
+
+            const restante = Math.max(0, (choquePoderN4.duracionChoque - (ahora - choquePoderN4.inicioFase)) / 1000).toFixed(1);
+            ctx.font = 'bold 26px "Courier New", monospace';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.fillText('🔥 ¡PRESIONA [ESPACIO] RÁPIDO! 🔥', cx, h * 0.48 - 22);
+
+            ctx.font = 'bold 20px "Courier New", monospace';
+            ctx.fillStyle = choquePoderN4.pulsaciones >= choquePoderN4.metaPulsaciones ? '#4ade80' : '#ffd60a';
+            ctx.fillText(
+                `PODER: ${choquePoderN4.pulsaciones} / ${choquePoderN4.metaPulsaciones}  (${restante}s)`,
+                cx,
+                h * 0.48 + 12
+            );
+        }
+
+        ctx.restore();
+    }
+
+    // ==========================================
+    // JUGADOR CON CASCO ESPACIAL
+    // ==========================================
+    function dibujarJugadorEspacialN4(ahora) {
+        const parpadeo = ahora < jugador.invulnerableHasta && Math.floor(ahora / 100) % 2 === 0;
+        if (parpadeo) return;
+
+        const x = jugador.x;
+        const y = jugador.y;
+        const t = jugador.tam;
+        const cx = x + t / 2;
+        const enMovimiento = teclas.ArrowUp || teclas.ArrowDown || teclas.ArrowLeft || teclas.ArrowRight;
+
+        ctx.save();
+
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(x + 3, y + t * 0.45, 5, t * 0.42);
+        ctx.fillRect(x + t - 8, y + t * 0.45, 5, t * 0.42);
+        if (enMovimiento) {
+            const flama = 6 + Math.sin(ahora / 40) * 4;
+            ctx.fillStyle = '#38bdf8';
+            ctx.beginPath();
+            ctx.moveTo(x + 3, y + t * 0.87);
+            ctx.lineTo(x + 5.5, y + t * 0.87 + flama);
+            ctx.lineTo(x + 8, y + t * 0.87);
+            ctx.moveTo(x + t - 8, y + t * 0.87);
+            ctx.lineTo(x + t - 5.5, y + t * 0.87 + flama);
+            ctx.lineTo(x + t - 3, y + t * 0.87);
+            ctx.fill();
+        }
+
+        ctx.fillStyle = '#e2e8f0';
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.roundRect(x + 6, y + t * 0.52, t - 12, t * 0.44, 5);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#0ea5e9';
+        ctx.fillRect(cx - 4, y + t * 0.62, 8, 5);
+
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + 8, y + 6);
+        ctx.lineTo(cx + 11, y - 4);
+        ctx.stroke();
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.arc(cx + 11, y - 5, 2.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        const radioCasco = t * 0.42;
+        const cascoY = y + t * 0.34;
+        ctx.fillStyle = '#f8fafc';
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx, cascoY, radioCasco, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        const visorGrad = ctx.createLinearGradient(cx - radioCasco, cascoY - 6, cx + radioCasco, cascoY + 8);
+        visorGrad.addColorStop(0, '#0284c7');
+        visorGrad.addColorStop(0.5, '#0f172a');
+        visorGrad.addColorStop(1, '#38bdf8');
+        ctx.fillStyle = visorGrad;
+        ctx.beginPath();
+        ctx.ellipse(cx, cascoY + 1, radioCasco * 0.78, radioCasco * 0.56, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffd60a';
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
+        ctx.beginPath();
+        ctx.ellipse(cx - 4.5, cascoY - 2, 4, 1.8, -0.35, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    // ==========================================
+    // JEFES DE FASE 1
+    // ==========================================
+    function dibujarOjoIntimidanteN4(x, y, radio, mirarX, mirarY, esPrincipal = false) {
+        ctx.save();
+        ctx.translate(x, y);
+
+        const escGrad = ctx.createRadialGradient(0, 0, radio * 0.2, 0, 0, radio);
+        escGrad.addColorStop(0, '#ffffff');
+        escGrad.addColorStop(0.78, '#f1f5f9');
+        escGrad.addColorStop(1, '#991b1b');
+        ctx.fillStyle = escGrad;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, radio, radio * 0.62, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = esPrincipal ? '#ffd60a' : '#d97706';
+        ctx.lineWidth = esPrincipal ? 2.4 : 1.4;
+        ctx.stroke();
+
+        const ang = Math.atan2(mirarY - y, mirarX - x);
+        const offsetPupila = radio * 0.24;
+        const px = Math.cos(ang) * offsetPupila;
+        const py = Math.sin(ang) * offsetPupila * 0.65;
+
+        const irisGrad = ctx.createRadialGradient(px, py, 1, px, py, radio * 0.38);
+        irisGrad.addColorStop(0, '#fef08a');
+        irisGrad.addColorStop(0.45, '#00b4d8');
+        irisGrad.addColorStop(1, '#1e1b4b');
+        ctx.fillStyle = irisGrad;
+        ctx.beginPath();
+        ctx.arc(px, py, radio * 0.38, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#020617';
+        ctx.beginPath();
+        ctx.ellipse(px, py, radio * 0.11, radio * 0.28, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(px - radio * 0.1, py - radio * 0.1, radio * 0.08, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    function dibujarSerafinN4(s, ahora) {
+        if (!s || s.vida <= 0) return;
+        const jugCx = jugador.x + jugador.tam / 2;
+        const jugCy = jugador.y + jugador.tam / 2;
+        const golpeado = ahora < s.danioFlashHasta;
+
+        ctx.save();
+        ctx.translate(s.x, s.y);
+
+        const aura = ctx.createRadialGradient(0, 0, 12, 0, 0, 92);
+        aura.addColorStop(0, golpeado ? 'rgba(56, 189, 248, 0.55)' : 'rgba(255, 214, 10, 0.38)');
+        aura.addColorStop(0.6, 'rgba(220, 38, 38, 0.12)');
+        aura.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = aura;
+        ctx.beginPath();
+        ctx.arc(0, 0, 92, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.save();
+        ctx.rotate(ahora * 0.0008);
+        for (let i = 0; i < 12; i++) {
+            const a = (i * Math.PI * 2) / 12;
+            const largoEspina = i % 2 === 0 ? 48 : 34;
+            ctx.fillStyle = i % 2 === 0 ? '#ffd60a' : '#f59e0b';
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(a - 0.08) * 20, Math.sin(a - 0.08) * 20);
+            ctx.lineTo(Math.cos(a) * largoEspina, Math.sin(a) * largoEspina);
+            ctx.lineTo(Math.cos(a + 0.08) * 20, Math.sin(a + 0.08) * 20);
+            ctx.closePath();
+            ctx.fill();
+        }
+        ctx.restore();
+
+        const batir = Math.sin(s.aleteo) * 0.24;
+        const paresAlas = [
+            { angBase: -0.62 + batir, largo: 78, ancho: 22 },
+            { angBase: 0.04 - batir * 0.85, largo: 90, ancho: 25 },
+            { angBase: 0.68 + batir * 0.65, largo: 68, ancho: 19 }
+        ];
+
+        paresAlas.forEach(par => {
+            [-1, 1].forEach(lado => {
+                ctx.save();
+                ctx.scale(lado, 1);
+                ctx.rotate(par.angBase);
+
+                const wingGrad = ctx.createLinearGradient(8, 0, par.largo, 0);
+                wingGrad.addColorStop(0, golpeado ? '#38bdf8' : '#fef3c7');
+                wingGrad.addColorStop(0.55, golpeado ? '#bae6fd' : '#ffffff');
+                wingGrad.addColorStop(1, golpeado ? '#0284c7' : '#fda4af');
+
+                ctx.fillStyle = wingGrad;
+                ctx.strokeStyle = golpeado ? '#ffffff' : '#d97706';
+                ctx.lineWidth = 2;
+
+                ctx.beginPath();
+                ctx.moveTo(10, -4);
+                ctx.quadraticCurveTo(par.largo * 0.5, -par.ancho * 1.15, par.largo, -8);
+                ctx.lineTo(par.largo * 0.84, 0);
+                ctx.lineTo(par.largo * 0.94, 8);
+                ctx.lineTo(par.largo * 0.72, 11);
+                ctx.lineTo(par.largo * 0.80, 18);
+                ctx.quadraticCurveTo(par.largo * 0.45, par.ancho * 0.75, 10, 10);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.strokeStyle = 'rgba(217, 119, 6, 0.65)';
+                ctx.lineWidth = 1.3;
+                ctx.beginPath();
+                ctx.moveTo(14, 0);
+                ctx.quadraticCurveTo(par.largo * 0.48, -par.ancho * 0.45, par.largo * 0.85, -2);
+                ctx.stroke();
+
+                dibujarOjoIntimidanteN4(par.largo * 0.36, -2, 6.5, jugCx - s.x, jugCy - s.y, false);
+                dibujarOjoIntimidanteN4(par.largo * 0.60, -3, 5.8, jugCx - s.x, jugCy - s.y, false);
+                dibujarOjoIntimidanteN4(par.largo * 0.80, -3, 4.6, jugCx - s.x, jugCy - s.y, false);
+
+                ctx.restore();
+            });
+        });
+
+        ctx.fillStyle = golpeado ? '#00e5ff' : '#fffbeb';
+        ctx.beginPath();
+        ctx.arc(0, 0, 26, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffd60a';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        if (!s.alasCerradas) {
+            dibujarOjoIntimidanteN4(0, 0, 21, jugCx, jugCy, true);
+        } else {
+            [-1, 1].forEach(lado => {
+                ctx.save();
+                ctx.scale(lado, 1);
+                const shieldGrad = ctx.createLinearGradient(0, -28, 32, 28);
+                shieldGrad.addColorStop(0, '#ffffff');
+                shieldGrad.addColorStop(1, '#fde68a');
+                ctx.fillStyle = shieldGrad;
+                ctx.strokeStyle = '#d97706';
+                ctx.lineWidth = 2.8;
+                ctx.beginPath();
+                ctx.moveTo(0, -30);
+                ctx.quadraticCurveTo(34, -12, 28, 28);
+                ctx.lineTo(0, 22);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.strokeStyle = '#b45309';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(5, -14);
+                ctx.lineTo(22, -6);
+                ctx.moveTo(5, 0);
+                ctx.lineTo(24, 6);
+                ctx.moveTo(5, 12);
+                ctx.lineTo(18, 16);
+                ctx.stroke();
+                ctx.restore();
+            });
+        }
+
+        ctx.restore();
+    }
+
+    function dibujarOphanimN4(x, y, radio, rotacion, golpeado, esClon) {
+        const jugCx = jugador.x + jugador.tam / 2;
+        const jugCy = jugador.y + jugador.tam / 2;
+
+        ctx.save();
+        ctx.translate(x, y);
+        if (esClon) ctx.globalAlpha = 0.85;
+
+        const fuegoGrad = ctx.createRadialGradient(0, 0, radio * 0.4, 0, 0, radio * 1.85);
+        fuegoGrad.addColorStop(0, golpeado ? 'rgba(56, 189, 248, 0.55)' : 'rgba(255, 214, 10, 0.42)');
+        fuegoGrad.addColorStop(0.55, 'rgba(234, 88, 12, 0.16)');
+        fuegoGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = fuegoGrad;
+        ctx.beginPath();
+        ctx.arc(0, 0, radio * 1.85, 0, Math.PI * 2);
+        ctx.fill();
+
+        const anillos = [
+            { rx: radio * 1.48, ry: radio * 0.56, rot: rotacion, ojos: 8 },
+            { rx: radio * 1.48, ry: radio * 0.56, rot: -rotacion * 1.15 + 1.05, ojos: 8 },
+            { rx: radio * 0.58, ry: radio * 1.45, rot: rotacion * 0.9 + 2.1, ojos: 8 },
+            { rx: radio * 1.18, ry: radio * 1.18, rot: -rotacion * 0.65, ojos: 10 }
+        ];
+
+        anillos.forEach(an => {
+            ctx.save();
+            ctx.rotate(an.rot);
+
+            ctx.strokeStyle = '#78350f';
+            ctx.lineWidth = 8.5;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, an.rx, an.ry, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.strokeStyle = golpeado ? '#00e5ff' : '#ffd60a';
+            ctx.lineWidth = 5.5;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, an.rx, an.ry, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, an.rx, an.ry, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            for (let k = 0; k < an.ojos; k++) {
+                const a = (k * Math.PI * 2) / an.ojos;
+                const ox = Math.cos(a) * an.rx;
+                const oy = Math.sin(a) * an.ry;
+
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.ellipse(ox, oy, 5.2, 3.4, a, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#b45309';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                ctx.fillStyle = '#0284c7';
+                ctx.beginPath();
+                ctx.arc(ox, oy, 2.3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#020617';
+                ctx.beginPath();
+                ctx.arc(ox, oy, 1.1, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        });
+
+        ctx.fillStyle = '#090418';
+        ctx.beginPath();
+        ctx.arc(0, 0, radio * 0.62, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffd60a';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        dibujarOjoIntimidanteN4(0, 0, radio * 0.56, jugCx, jugCy, true);
+
+        ctx.restore();
+    }
+
+    function dibujarBarrasVidaJefesN4() {
+        const w = canvas.width;
+
+        if (faseActualN4 === 1) {
+            const barW = Math.min(310, w * 0.35);
+            const barH = 16;
+            const y = 46;
+
+            const jefesUI = [
+                { jefe: serafinN4, x: w * 0.5 - barW - 24, etiqueta: 'SERAFÍN' },
+                { jefe: ophanimN4, x: w * 0.5 + 24, etiqueta: 'OPHANIM' }
+            ];
+
+            jefesUI.forEach(item => {
+                const pct = Math.max(0, item.jefe.vida / item.jefe.vidaMax);
+                ctx.save();
+                ctx.fillStyle = 'rgba(10, 4, 24, 0.88)';
+                ctx.fillRect(item.x, y, barW, barH);
+
+                const barGrad = ctx.createLinearGradient(item.x, y, item.x + barW, y);
+                barGrad.addColorStop(0, '#f59e0b');
+                barGrad.addColorStop(0.5, '#ffd60a');
+                barGrad.addColorStop(1, '#fef08a');
+                ctx.fillStyle = barGrad;
+                ctx.fillRect(item.x, y, barW * pct, barH);
+
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(item.x, y, barW, barH);
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 11px "Courier New", monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(`${item.etiqueta}: ${item.jefe.vida} / ${item.jefe.vidaMax} HP`, item.x + barW / 2, y + 12);
+                ctx.restore();
+            });
+        } else if (faseActualN4 === 2 && diosFusionadoN4) {
+            const barW = Math.min(540, w * 0.62);
+            const barH = 18;
+            const x = (w - barW) / 2;
+            const y = 46;
+            const pct = Math.max(0, diosFusionadoN4.vida / diosFusionadoN4.vidaMax);
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(10, 4, 24, 0.9)';
+            ctx.fillRect(x, y, barW, barH);
+
+            const barGrad = ctx.createLinearGradient(x, y, x + barW, y);
+            barGrad.addColorStop(0, '#991b1b');
+            barGrad.addColorStop(0.5, '#dc2626');
+            barGrad.addColorStop(1, '#f4f4f5');
+            ctx.fillStyle = barGrad;
+            ctx.fillRect(x, y, barW * pct, barH);
+
+            ctx.strokeStyle = '#f4f4f5';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, barW, barH);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 12px "Courier New", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(
+                `👁️ DIOS FUSIONADO SERAFÍN-OPHANIM: ${diosFusionadoN4.vida} / ${diosFusionadoN4.vidaMax} HP 👁️`,
+                x + barW / 2,
+                y + 13
+            );
+            ctx.restore();
+        }
+    }
+
+    // ==========================================
+    // FONDO CÓSMICO DETALLADO (ESCENARIO BASE)
+    // ==========================================
+    function dibujarFondoGalaxiaNivel4() {
+        const w = canvas.width;
+        const h = canvas.height;
+        const cx = w * 0.5;
+        const cy = h * 0.44;
+        const radioMax = Math.max(w, h) * 0.7;
+
+        const bgGrad = ctx.createRadialGradient(cx, cy, 20, cx, cy, radioMax);
+        bgGrad.addColorStop(0, '#230c42');
+        bgGrad.addColorStop(0.32, '#110729');
+        bgGrad.addColorStop(0.7, '#060212');
+        bgGrad.addColorStop(1, '#010004');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        nebulosasN4.forEach(neb => {
+            const g = ctx.createRadialGradient(neb.x, neb.y, 10, neb.x, neb.y, neb.r);
+            g.addColorStop(0, neb.c1);
+            g.addColorStop(1, neb.c2);
+            ctx.fillStyle = g;
+            ctx.fillRect(0, 0, w, h);
+        });
+
+        ctx.save();
+        const px = w * 0.12;
+        const py = h * 0.18;
+        const pGrad = ctx.createRadialGradient(px - 10, py - 10, 4, px, py, 34);
+        pGrad.addColorStop(0, '#a5b4fc');
+        pGrad.addColorStop(0.55, '#4338ca');
+        pGrad.addColorStop(1, '#0f172a');
+        ctx.fillStyle = pGrad;
+        ctx.beginPath();
+        ctx.arc(px, py, 34, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(216, 180, 254, 0.45)';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.ellipse(px, py, 64, 15, -0.32, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        if (!juegoPausadoN4) anguloGalaxiaN4 += 0.002;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(-0.36);
+        ctx.scale(1.3, 0.66);
+
+        const halo = ctx.createRadialGradient(0, 0, 8, 0, 0, radioMax * 0.58);
+        halo.addColorStop(0, 'rgba(255, 252, 240, 0.98)');
+        halo.addColorStop(0.12, 'rgba(243, 232, 255, 0.72)');
+        halo.addColorStop(0.32, 'rgba(168, 85, 247, 0.34)');
+        halo.addColorStop(0.62, 'rgba(79, 70, 229, 0.15)');
+        halo.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = halo;
+        ctx.beginPath();
+        ctx.arc(0, 0, radioMax * 0.58, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.rotate(anguloGalaxiaN4);
+        for (let i = 0; i < brazosGalaxiaN4.length; i++) {
+            const pt = brazosGalaxiaN4[i];
+            const bx = Math.cos(pt.anguloBase) * pt.radio;
+            const by = Math.sin(pt.anguloBase) * pt.radio;
+            ctx.fillStyle = pt.color;
+            ctx.beginPath();
+            ctx.arc(bx, by, pt.tam, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        const nucleo = ctx.createRadialGradient(0, 0, 2, 0, 0, 72);
+        nucleo.addColorStop(0, '#ffffff');
+        nucleo.addColorStop(0.38, 'rgba(254, 243, 199, 0.9)');
+        nucleo.addColorStop(1, 'rgba(192, 132, 252, 0)');
+        ctx.fillStyle = nucleo;
+        ctx.beginPath();
+        ctx.arc(0, 0, 72, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        for (let i = 0; i < estrellasN4.length; i++) {
+            const st = estrellasN4[i];
+            if (!juegoPausadoN4) {
+                st.y += st.velY;
+                st.x += st.velX;
+                st.parpadeo += 0.045;
+            }
+
+            if (st.y > h) { st.y = -4; st.x = Math.random() * w; }
+            if (st.x < 0) st.x = w;
+            if (st.x > w) st.x = 0;
+
+            const brillo = st.alfa * (0.72 + 0.28 * Math.sin(st.parpadeo));
+            ctx.globalAlpha = brillo;
+            ctx.fillStyle = st.tinte;
+            ctx.beginPath();
+            ctx.arc(st.x, st.y, st.radio, 0, Math.PI * 2);
+            ctx.fill();
+
+            if (st.destelloCruz) {
+                ctx.strokeStyle = st.tinte;
+                ctx.lineWidth = 0.9;
+                ctx.beginPath();
+                ctx.moveTo(st.x - st.radio * 3.2, st.y);
+                ctx.lineTo(st.x + st.radio * 3.2, st.y);
+                ctx.moveTo(st.x, st.y - st.radio * 3.2);
+                ctx.lineTo(st.x, st.y + st.radio * 3.2);
+                ctx.stroke();
+            }
+        }
+        ctx.globalAlpha = 1;
+
+        if (!juegoPausadoN4 && Math.random() < 0.015 && estrellasFugacesN4.length < 2) {
+            estrellasFugacesN4.push({
+                x: Math.random() * w,
+                y: Math.random() * (h * 0.4),
+                vx: -9 - Math.random() * 5,
+                vy: 5 + Math.random() * 4,
+                vida: 1.0
+            });
+        }
+        estrellasFugacesN4.forEach(ef => {
+            if (!juegoPausadoN4) {
+                ef.x += ef.vx;
+                ef.y += ef.vy;
+                ef.vida -= 0.035;
+            }
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, ef.vida);
+            ctx.strokeStyle = '#e0f2fe';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(ef.x, ef.y);
+            ctx.lineTo(ef.x - ef.vx * 3.5, ef.y - ef.vy * 3.5);
+            ctx.stroke();
+            ctx.restore();
+        });
+        estrellasFugacesN4 = estrellasFugacesN4.filter(ef => ef.vida > 0);
+    }
+
+    function bucleNivel4() {
+        if (!juegoActivo || nivelActual !== 4) return;
+        const ahora = Date.now();
+
+        if (!juegoPausadoN4) {
+            if (puedeMoverse && !choquePoderN4.activo && !cinematicaFase2N4.activa) {
+                if (teclas.ArrowUp) jugador.y -= jugador.vel;
+                if (teclas.ArrowDown) jugador.y += jugador.vel;
+                if (teclas.ArrowLeft) jugador.x -= jugador.vel;
+                if (teclas.ArrowRight) jugador.x += jugador.vel;
+
+                jugador.x = Math.max(12, Math.min(canvas.width - 12 - jugador.tam, jugador.x));
+                jugador.y = Math.max(12, Math.min(canvas.height - 60 - jugador.tam, jugador.y));
+            }
+            actualizarLogicaNivel4();
+        }
+
+        // Renderizar escenario activo (Galaxia, Infierno, Mar Japonés o Gran Tepuy)
+        dibujarEscenarioActivoNivel4(ahora);
+
+        if (cinematicaFase2N4.activa) {
+            dibujarCinematicaFase2N4(ahora);
+            if (juegoPausadoN4) dibujarOverlayPausaN4();
+            animacionIdNivel4 = requestAnimationFrame(bucleNivel4);
+            return;
+        }
+
+        // 1. Aviso de embestida
+        const embestidor = (faseActualN4 === 1) ? serafinN4 : diosFusionadoN4;
+        if (!choquePoderN4.activo && embestidor && embestidor.vida > 0 && embestidor.estado === 'embestida') {
+            const sx = embestidor.embestidaStartX;
+            const sy = embestidor.embestidaStartY;
+            const ang = Math.atan2(embestidor.embestidaTargetY - sy, embestidor.embestidaTargetX - sx);
+            const ex = sx + Math.cos(ang) * 1800;
+            const ey = sy + Math.sin(ang) * 1800;
+            const anchoFranja = embestidor.radio * 2;
+
+            ctx.save();
+            ctx.strokeStyle = 'rgba(255, 214, 10, 0.25)';
+            ctx.lineWidth = anchoFranja;
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(ex, ey);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#ffd60a';
+            ctx.lineWidth = 2.5;
+            const perpX = -Math.sin(ang) * (anchoFranja / 2);
+            const perpY = Math.cos(ang) * (anchoFranja / 2);
+            ctx.beginPath();
+            ctx.moveTo(sx + perpX, sy + perpY);
+            ctx.lineTo(ex + perpX, ey + perpY);
+            ctx.moveTo(sx - perpX, sy - perpY);
+            ctx.lineTo(ex - perpX, ey - perpY);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // 2. Agujeros negros
+        agujerosNegrosN4.forEach(ag => {
+            const edad = ahora - ag.creadoEn;
+            ctx.save();
+            if (edad < ag.tiempoAviso) {
+                const prog = edad / ag.tiempoAviso;
+                ctx.strokeStyle = '#ffd60a';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.arc(ag.x, ag.y, ag.radio, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.fillStyle = 'rgba(255, 214, 10, 0.2)';
+                ctx.beginPath();
+                ctx.arc(ag.x, ag.y, ag.radio * prog, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                ctx.fillStyle = '#020008';
+                ctx.beginPath();
+                ctx.arc(ag.x, ag.y, ag.radio, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = '#ffd60a';
+                ctx.lineWidth = 5.5;
+                ctx.beginPath();
+                ctx.arc(ag.x, ag.y, ag.radio, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.strokeStyle = '#fef08a';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(ag.x, ag.y, ag.radio * 0.72, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            ctx.restore();
+        });
+
+        // 3. Clones en los lados
+        clonesOphanimN4.forEach(cl => {
+            const edad = ahora - cl.creadoEn;
+            const ang = Math.atan2(cl.targetY - cl.y, cl.targetX - cl.x);
+            const ex = cl.x + Math.cos(ang) * 1800;
+            const ey = cl.y + Math.sin(ang) * 1800;
+
+            ctx.save();
+            if (edad < cl.tiempoAviso) {
+                const esFijo = edad >= cl.tiempoAviso - 400;
+                ctx.strokeStyle = esFijo ? '#ff9e00' : 'rgba(255, 214, 10, 0.75)';
+                ctx.setLineDash([12, 8]);
+                ctx.lineWidth = esFijo ? 4.5 : 3;
+                ctx.beginPath();
+                ctx.moveTo(cl.x, cl.y);
+                ctx.lineTo(ex, ey);
+                ctx.stroke();
+            } else {
+                ctx.strokeStyle = '#ffd60a';
+                ctx.lineWidth = 18;
+                ctx.beginPath();
+                ctx.moveTo(cl.x, cl.y);
+                ctx.lineTo(ex, ey);
+                ctx.stroke();
+
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 6;
+                ctx.beginPath();
+                ctx.moveTo(cl.x, cl.y);
+                ctx.lineTo(ex, ey);
+                ctx.stroke();
+            }
+            ctx.restore();
+
+            dibujarOphanimN4(cl.x, cl.y, 32, (ophanimN4 ? ophanimN4.rotacionAnillos : ahora * 0.005) * 1.4, false, true);
+        });
+
+        // 4. Rayos
+        rayosDoradosN4.forEach(r => {
+            ctx.save();
+            ctx.translate(r.x, r.y);
+            ctx.rotate(r.angulo);
+
+            ctx.fillStyle = 'rgba(255, 214, 10, 0.35)';
+            ctx.fillRect(-r.largo * 0.55, -r.ancho * 0.85, r.largo * 1.1, r.ancho * 1.7);
+
+            ctx.fillStyle = '#ffd60a';
+            ctx.fillRect(-r.largo / 2, -r.ancho / 2, r.largo, r.ancho);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(-r.largo * 0.45, -r.ancho * 0.24, r.largo * 0.9, r.ancho * 0.48);
+            ctx.restore();
+        });
+
+        // 5. Corazones de curación cada 20s
+        dibujarCorazonesCuracionN4(ahora);
+
+        // 6. Disparos infinitos del jugador
+        disparosJugadorN4.forEach(d => {
+            ctx.save();
+            d.estela.forEach((pt, idx) => {
+                ctx.globalAlpha = (idx + 1) / (d.estela.length + 1) * 0.55;
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, d.radio * 0.7, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = '#00e5ff';
+            ctx.beginPath();
+            ctx.arc(d.x, d.y, d.radio, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(d.x, d.y, d.radio * 0.48, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        // 7. Dibujar jefes
+        if (faseActualN4 === 1) {
+            dibujarSerafinN4(serafinN4, ahora);
+            if (ophanimN4 && ophanimN4.vida > 0) {
+                dibujarOphanimN4(
+                    ophanimN4.x,
+                    ophanimN4.y,
+                    ophanimN4.radio,
+                    ophanimN4.rotacionAnillos,
+                    ahora < ophanimN4.danioFlashHasta,
+                    false
+                );
+            }
+        } else if (faseActualN4 === 2) {
+            dibujarDiosFusionadoN4(diosFusionadoN4, ahora);
+        }
+
+        // 8. Choque de poderes supremo
+        dibujarChoquePoderesN4(ahora);
+
+        // 9. Portal Dimensional (cada 500 HP)
+        dibujarPortalDimensionalN4(ahora);
+
+        // 10. Partículas
+        particulasN4.forEach(p => {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, p.vida);
+            ctx.fillStyle = p.color || '#ffd60a';
+            ctx.fillRect(p.x - p.tam / 2, p.y - p.tam / 2, p.tam, p.tam);
+            ctx.restore();
+        });
+
+        // 11. Jugador con casco espacial
+        dibujarJugadorEspacialN4(ahora);
+
+        // 12. Destello Cegador Blanco (se desvanece poco a poco)
+        if (destelloCegadorN4.activo && destelloCegadorN4.alfaBlanco > 0) {
+            ctx.save();
+            ctx.fillStyle = `rgba(255, 255, 255, ${destelloCegadorN4.alfaBlanco})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.restore();
+        }
+
+        // 13. Barras de vida
+        dibujarBarrasVidaJefesN4();
+
+        // 14. Cuenta regresiva / mensajes
         if (textoContador !== '') {
             ctx.save();
             ctx.font = 'bold 54px "Courier New", monospace';
-            ctx.fillStyle = '#ff4d6d';
+            ctx.fillStyle = textoContador === 'GAME OVER' ? '#ff1e1e' : '#ffd60a';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(textoContador, canvas.width / 2, canvas.height / 2);
             ctx.restore();
         }
 
+        // 15. Pantalla de Pausa
+        if (juegoPausadoN4) {
+            dibujarOverlayPausaN4();
+        }
+
         animacionIdNivel4 = requestAnimationFrame(bucleNivel4);
+    }
+
+    function dibujarOverlayPausaN4() {
+        ctx.save();
+        ctx.fillStyle = 'rgba(2, 4, 15, 0.72)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.font = 'bold 52px "Courier New", monospace';
+        ctx.fillStyle = '#ffd60a';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('⏸ JUEGO EN PAUSA', canvas.width / 2, canvas.height / 2 - 20);
+
+        ctx.font = 'bold 18px "Courier New", monospace';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('Presiona [P] o haz clic en "Reanudar" para continuar', canvas.width / 2, canvas.height / 2 + 28);
+        ctx.restore();
     }
 </script>
