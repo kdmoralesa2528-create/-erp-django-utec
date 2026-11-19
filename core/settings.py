@@ -3,8 +3,9 @@ import dj_database_url
 from pathlib import Path
 import os
 from datetime import timedelta
+from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
-
+load_dotenv(BASE_DIR / '.env')
 SECRET_KEY = 'django-insecure-tu-clave-local'
 DEBUG = True
 ALLOWED_HOSTS = ['*']
@@ -184,15 +185,16 @@ CELERY_TASK_DEFAULT_QUEUE = 'erp_django'
 CELERY_TASK_ALWAYS_EAGER     = False
 CELERY_TASK_EAGER_PROPAGATES = True
 
-# — EMAIL / SENDGRID (W17) ———————————————————————————————————————
+
+# — EMAIL / BREVO (W17) —————————————————————————————————————
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@erp-django.com')
 EMAIL_SUBJECT_PREFIX = '[ERP Django] '
 ADMINS = [('Administrador', os.getenv('ADMIN_EMAIL', 'admin@erp-django.com'))]
 
-SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', '')
+BREVO_API_KEY = os.getenv('BREVO_API_KEY', '')
 ANYMAIL = {
-    'SENDGRID_API_KEY': SENDGRID_API_KEY,
+    'BREVO_API_KEY': BREVO_API_KEY,
 }
 
 # ── CELERY BEAT — Tareas programadas ──────────────────────────────────────

@@ -38,3 +38,4 @@ SECURE_CONTENT_TYPE_NOSNIFF    = True
 SECURE_REFERRER_POLICY         = 'same-origin'
 
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+EMAIL_BACKEND = 'anymail.backends.brevo.EmailBackend'
