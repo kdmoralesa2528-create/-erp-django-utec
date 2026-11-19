@@ -18,7 +18,7 @@ Django==4.2
 django-allauth==0.63.3
 django-anymail==10.3
 django-environ==0.14.0
-django-filter==26.2
+django-filter==24.3
 django-jazzmin==3.0.5
 django-storages==1.14.2
 djangorestframework==3.17.2
