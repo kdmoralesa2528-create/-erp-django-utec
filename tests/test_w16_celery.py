@@ -86,7 +86,7 @@ class TareaInvocadaDesdeVistaTest(TestCase):
         self.pedido = Pedido.objects.create(
             numero_pedido = 'PED-2025-VISTA',
             cliente       = cli,
-            estado        = 'pendiente',
+            estado        = 'pediente',
             total_pagado  = Decimal('100.00'),
         )
         self.user = User.objects.create_user('viewer', password='pass')

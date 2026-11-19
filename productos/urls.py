@@ -10,4 +10,6 @@ urlpatterns = [
     path('<int:producto_id>/editar/', views.ProductoUpdateView.as_view(), name='editar'),
     path('<int:producto_id>/eliminar/', views.ProductoDeleteView.as_view(), name='eliminar'),
     path('exportar-excel/', views.exportar_productos_excel, name='exportar_excel'),
+    path('<int:producto_id>/historico/',
+         views.HistoricoProductoView.as_view(), name='historico'),
 ]

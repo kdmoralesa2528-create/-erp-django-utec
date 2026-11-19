@@ -1,6 +1,6 @@
 """Modelos de la app productos — Espiral 2 W06."""
 from decimal import Decimal
-
+from simple_history.models import HistoricalRecords
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
@@ -71,10 +71,12 @@ class Producto(models.Model):
                 'El stock no puede ser negativo. '
                 f'Valor recibido: {self.stock}'
             )
+    creado    = models.DateTimeField(auto_now_add=True)
 
-        if errors:
-            raise ValidationError(errors)
-
+    history   = HistoricalRecords(
+        verbose_name='Historial de cambios',
+    )
+       
     class Meta:
         verbose_name = 'Producto'
         verbose_name_plural = 'Productos'

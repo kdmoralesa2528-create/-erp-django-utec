@@ -291,7 +291,7 @@ def pago_exitoso(request, pedido_id: int):
 
     _guardar_carrito(request, {})
     try:
-        enviar_confirmacion_pedido(pedido.pk)
+        enviar_confirmacion_pedido.delay(pedido.pk)
     except Exception:
         pass
     messages.success(

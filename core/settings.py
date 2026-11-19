@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 from datetime import timedelta
 from dotenv import load_dotenv
+import sys
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
 SECRET_KEY = 'django-insecure-tu-clave-local'
@@ -27,6 +28,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'whitenoise.runserver_nostatic',
     'django_filters', 
+    'simple_history',
     'anymail',
     # Apps del ERP
     'clientes',
@@ -46,7 +48,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'allauth.account.middleware.AccountMiddleware',   # ← agregar al final
+    'allauth.account.middleware.AccountMiddleware',  
+    'simple_history.middleware.HistoryRequestMiddleware',
 ]
 ROOT_URLCONF = 'core.urls'
 
@@ -237,3 +240,44 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
 }
+# ── CACHÉ — Redis (DB separada del broker Celery) ──────────────────────────
+REDIS_CACHE_URL = os.getenv('REDIS_CACHE_URL', '')
+if REDIS_CACHE_URL:
+    CACHES = {
+        'default': {
+            'BACKEND':  'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_CACHE_URL,
+            'TIMEOUT':  300,   # 5 minutos por defecto
+        }
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'TIMEOUT': 300,
+        }
+    }
+    SITE_DOMAIN = os.getenv('SITE_DOMAIN', 'http://127.0.0.1:8000')
+ # ── DJANGO-SIMPLE-HISTORY ──────────────────────────────────────────────────
+SIMPLE_HISTORY_REVERT_DISABLED = True
+SIMPLE_HISTORY_HISTORY_CHANGE_REASON_CONTEXT_VARIABLE = 'history_change_reason'
+
+# ── AISLAMIENTO EN PRUEBAS (SIN REDIS LOCAL) ───────────────────────────────
+import sys
+if 'test' in sys.argv:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        }
+    }
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True
+    CELERY_BROKER_URL = 'memory://'
+    CELERY_RESULT_BACKEND = 'cache+memory://'
+    from core.celery import app as celery_app
+    celery_app.conf.update(
+        broker_url='memory://',
+        result_backend='cache+memory://',
+        task_always_eager=True,
+        task_eager_propagates=True,
+    )

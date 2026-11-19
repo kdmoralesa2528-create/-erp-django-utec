@@ -5,6 +5,7 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from clientes.models import Cliente
 from productos.models import Producto
+from simple_history.models import HistoricalRecords
 
 class Venta(models.Model):
     """Encabezado de una venta interna."""
@@ -16,7 +17,7 @@ class Venta(models.Model):
     fecha   = models.DateTimeField(
         auto_now_add=True, verbose_name='Fecha'
     )
-
+    history = HistoricalRecords(verbose_name='Historial de venta')
     class Meta:
         verbose_name        = 'Venta'
         verbose_name_plural = 'Ventas'
@@ -126,6 +127,7 @@ class Pedido(models.Model):
             '"cantidad": 2, "precio": "500.00"}]'
         )
     )
+    history = HistoricalRecords(verbose_name='Historial de pedido')
 class Meta:
         verbose_name        = 'Pedido'
         verbose_name_plural = 'Pedidos'
