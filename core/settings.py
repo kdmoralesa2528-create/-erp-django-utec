@@ -186,13 +186,17 @@ CELERY_TASK_ALWAYS_EAGER     = False
 CELERY_TASK_EAGER_PROPAGATES = True
 
 
-# — EMAIL / BREVO (W17) —————————————————————————————————————
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+BREVO_API_KEY = os.getenv('BREVO_API_KEY', '')
+
+if BREVO_API_KEY:
+    EMAIL_BACKEND = 'anymail.backends.brevo.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@erp-django.com')
 EMAIL_SUBJECT_PREFIX = '[ERP Django] '
 ADMINS = [('Administrador', os.getenv('ADMIN_EMAIL', 'admin@erp-django.com'))]
 
-BREVO_API_KEY = os.getenv('BREVO_API_KEY', '')
 ANYMAIL = {
     'BREVO_API_KEY': BREVO_API_KEY,
 }
