@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container py-5 text-center">
+    <div class="card shadow p-4 mx-auto" style="max-width: 500px;">
+        <h2 class="text-success mb-3">¡Pago Exitoso!</h2>
+        <p class="lead">Tu pedido <strong>#{{ pedido.pk }}</strong> ha sido procesado correctamente.</p>
+        <hr>
+        <p>Gracias por tu compra.</p>
+        <a href="{% url 'catalogo:catalogo' %}" class="btn btn-primary mt-3">Volver al Catálogo</a>
+    </div>
+</div>
+{% endblock %}
