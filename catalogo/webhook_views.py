@@ -69,8 +69,8 @@ if pedido.estado != 'pagado':
         except Exception as e:
             print(f"ERROR ENVIANDO CORREO PEDIDO {pedido.pk}: {e}", flush=True)
     else:
-        logger.info(f'Pedido {pedido.numero_pedido} ya estaba pagado – idempotente, sin cambios.')
-        logger.info(f'Pedido {pedido.numero_pedido} ya estaba pagado – idempotente, sin cambios.')
+        logger.info(f'Pedido {pedido.numero_pedido} ya estaba pagado - idempotente, sin cambios.')
+
 def _manejar_pago_fallido(payment_intent: dict) -> None:
     pedido_id = _extraer_pedido_id(payment_intent)
     if pedido_id is None:
