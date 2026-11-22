@@ -32,15 +32,16 @@ def stripe_webhook(request) -> HttpResponse:
         logger.warning('Webhook: firma de Stripe inválida.')
         return HttpResponse('Firma inválida.', status=400)
 
-    event_type = event['type']
-    data_object = event['data']['object']
+    event_dict = event.to_dict() if hasattr(event, 'to_dict') else dict(event)
+    event_type = event_dict['type']
+    data_object = event_dict['data']['object']
 
     if event_type == 'payment_intent.succeeded':
         _manejar_pago_exitoso(data_object)
     elif event_type == 'payment_intent.payment_failed':
         _manejar_pago_fallido(data_object)
     else:
-        logger.info(f'Webhook: evento no manejado "{event_type}" (ID: {event["id"]}).')
+        logger.info(f'Webhook: evento no manejado "{event_type}" (ID: {event_dict.get("id")}).')
 
     return HttpResponse(status=200)
 
@@ -87,7 +88,7 @@ def _manejar_pago_fallido(payment_intent: dict) -> None:
 
 
 def _extraer_pedido_id(payment_intent: dict) -> int | None:
-    metadata = payment_intent.get('metadata', {})
+    metadata = payment_intent.get('metadata') or {}
     pedido_id = metadata.get('pedido_id')
 
     if not pedido_id:
