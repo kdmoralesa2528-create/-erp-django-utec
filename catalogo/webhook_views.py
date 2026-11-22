@@ -61,9 +61,15 @@ def _manejar_pago_exitoso(payment_intent: dict) -> None:
         pedido.estado = 'pagado'
         pedido.save(update_fields=['estado'])
         logger.info(f'Pedido {pedido.numero_pedido} actualizado a "pagado".')
-        _descontar_stock(pedido)
+
+        try:
+            _descontar_stock(pedido)
+        except Exception as e:
+            print(f"ERROR DESCONTANDO STOCK PEDIDO {pedido.pk}: {e}", flush=True)
+
         try:
             enviar_confirmacion_pedido(pedido.pk)
+            print(f"CORREO ENVIADO OK PEDIDO {pedido.pk}", flush=True)
         except Exception as e:
             print(f"ERROR ENVIANDO CORREO PEDIDO {pedido.pk}: {e}", flush=True)
     else:
@@ -103,7 +109,15 @@ def _extraer_pedido_id(payment_intent: dict) -> int | None:
 
 
 def _descontar_stock(pedido: Pedido) -> None:
-    for item in pedido.items.select_related('producto').all():
+    relacion = (
+        getattr(pedido, 'items', None)
+        or getattr(pedido, 'detalles', None)
+        or getattr(pedido, 'detallepedido_set', None)
+    )
+    if relacion is None:
+        return
+
+    for item in relacion.select_related('producto').all():
         Producto.objects.filter(pk=item.producto_id).update(
             stock=F('stock') - item.cantidad
         )
