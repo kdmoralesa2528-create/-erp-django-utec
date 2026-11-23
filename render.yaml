@@ -30,3 +30,13 @@ databases:
     user: erp_user
     plan: free
     region: oregon
+    
+    services:
+  - type: web
+    name: erp-django-utec
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: oregon
+    healthCheckPath: /

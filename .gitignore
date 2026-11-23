@@ -2,3 +2,8 @@ env_erp/
 db.sqlite3 
 .env 
 __pycache__/ 
+# Archivos de coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml

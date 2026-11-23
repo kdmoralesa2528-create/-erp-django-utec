@@ -21,6 +21,9 @@ class ProductoListView(ListView):
     context_object_name = 'productos'
     paginate_by         = 20
 
+    def get_queryset(self):
+        return Producto.objects.select_related('categoria', 'proveedor').all()
+
 
 class ProductoDetailView(DetailView):
     model               = Producto
@@ -28,6 +31,8 @@ class ProductoDetailView(DetailView):
     pk_url_kwarg        = 'producto_id'
     context_object_name = 'producto'
 
+    def get_queryset(self):
+        return Producto.objects.select_related('categoria', 'proveedor')
 
 class ProductoCreateView(LoginRequiredMixin, CreateView):
     """Formulario para crear un nuevo producto."""
