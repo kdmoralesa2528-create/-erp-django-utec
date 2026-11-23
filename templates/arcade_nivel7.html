@@ -1,0 +1,2135 @@
+<!-- ============================================================
+     NIVEL 7 — JEFE FINAL (15,000 HP | MODO ENOJADO A 7,000 HP)
+     Archivo independiente: arcade_nivel7.html
+     Rutas de audio configuradas para Django (/static/audio/):
+       - /static/audio/All_In_at_Midnight.mp3 (Fase 1)
+       - /static/audio/Jagged_Steel_Teeth.mp3 (Fase 2 - Modo Enojado <= 7,000 HP)
+     ============================================================ -->
+<script>
+    let animacionIdNivel7 = null;
+    let playerN7 = null;
+    let jefeTV_N7 = null;
+    let chispasFondoN7 = [];
+    let cablesFondoN7 = [];
+
+    // Colecciones de ataques y ayudas del Nivel 7
+    let proyectilesJefeN7 = [];
+    let laseresJefeN7 = [];
+    let ondasJefeN7 = [];
+    let dronesJefeN7 = [];
+    let mandibulasJefeN7 = [];
+    let corazonesCurativosN7 = [];
+    let floatingTextsN7 = [];
+    let proximoCorazonN7 = 0;
+
+    // Reproductor de música dinámica del Nivel 7
+    const musicaNivel7 = {
+        audioFase1: null,
+        audioFase2: null,
+        pistaActiva: 0
+    };
+
+    function iniciarMusicaNivel7(fase) {
+        if (!musicaNivel7.audioFase1) {
+            musicaNivel7.audioFase1 = new Audio('/static/audio/All_In_at_Midnight.mp3');
+            musicaNivel7.audioFase1.loop = true;
+            musicaNivel7.audioFase1.volume = 0.65;
+        }
+        if (!musicaNivel7.audioFase2) {
+            musicaNivel7.audioFase2 = new Audio('/static/audio/Jagged_Steel_Teeth.mp3');
+            musicaNivel7.audioFase2.loop = true;
+            musicaNivel7.audioFase2.volume = 0.72;
+        }
+
+        if (fase === 1 && musicaNivel7.pistaActiva !== 1) {
+            musicaNivel7.audioFase2.pause();
+            musicaNivel7.audioFase2.currentTime = 0;
+            musicaNivel7.audioFase1.currentTime = 0;
+            musicaNivel7.audioFase1.play().catch(() => {});
+            musicaNivel7.pistaActiva = 1;
+        } else if (fase === 2 && musicaNivel7.pistaActiva !== 2) {
+            musicaNivel7.audioFase1.pause();
+            musicaNivel7.audioFase2.currentTime = 0;
+            musicaNivel7.audioFase2.play().catch(() => {});
+            musicaNivel7.pistaActiva = 2;
+        }
+    }
+
+    function detenerMusicaNivel7() {
+        if (musicaNivel7.audioFase1) {
+            musicaNivel7.audioFase1.pause();
+            musicaNivel7.audioFase1.currentTime = 0;
+        }
+        if (musicaNivel7.audioFase2) {
+            musicaNivel7.audioFase2.pause();
+            musicaNivel7.audioFase2.currentTime = 0;
+        }
+        musicaNivel7.pistaActiva = 0;
+    }
+
+    const motorGraficoN7 = {
+        listo: false,
+        W: 480,
+        H: 360,
+        texCalavera: null,
+        texPesadillaRoja: null,
+        texSombraBoca: null,
+        texVidrioCRT: null,
+        bufferEstatica: null
+    };
+
+    function hash2D_N7(x, y) {
+        const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
+        return s - Math.floor(s);
+    }
+
+    function valueNoiseN7(x, y) {
+        const ix = Math.floor(x);
+        const iy = Math.floor(y);
+        const fx = x - ix;
+        const fy = y - iy;
+        const ux = fx * fx * (3 - 2 * fx);
+        const uy = fy * fy * (3 - 2 * fy);
+        const a = hash2D_N7(ix, iy);
+        const b = hash2D_N7(ix + 1, iy);
+        const c = hash2D_N7(ix, iy + 1);
+        const d = hash2D_N7(ix + 1, iy + 1);
+        return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+    }
+
+    function fbmN7(x, y) {
+        let v = 0, amp = 0.5, freq = 1;
+        for (let i = 0; i < 4; i++) {
+            v += amp * valueNoiseN7(x * freq, y * freq);
+            freq *= 2.03;
+            amp *= 0.5;
+        }
+        return v;
+    }
+
+    function inicializarMotorPixelShaderN7() {
+        if (motorGraficoN7.listo) return;
+        motorGraficoN7.listo = true;
+
+        const W = motorGraficoN7.W;
+        const H = motorGraficoN7.H;
+
+        // 1. CALAVERA REALISTA DE GRABADO EN ALTO CONTRASTE
+        const cSkull = document.createElement('canvas');
+        cSkull.width = W;
+        cSkull.height = H;
+        const ctxS = cSkull.getContext('2d');
+        ctxS.fillStyle = '#020203';
+        ctxS.fillRect(0, 0, W, H);
+        ctxS.save();
+        ctxS.translate(W / 2, H / 2 - 6);
+
+        const baseCran = ctxS.createRadialGradient(-24, -52, 10, 0, -8, 165);
+        baseCran.addColorStop(0, '#ffffff');
+        baseCran.addColorStop(0.38, '#e4e4e7');
+        baseCran.addColorStop(0.68, '#71717a');
+        baseCran.addColorStop(0.90, '#27272a');
+        baseCran.addColorStop(1, '#050507');
+
+        ctxS.fillStyle = baseCran;
+        ctxS.beginPath();
+        ctxS.moveTo(0, -146);
+        ctxS.bezierCurveTo(88, -146, 112, -84, 106, -24);
+        ctxS.bezierCurveTo(106, -4, 118, 14, 110, 36);
+        ctxS.bezierCurveTo(100, 56, 80, 62, 72, 76);
+        ctxS.lineTo(62, 134);
+        ctxS.bezierCurveTo(40, 156, -40, 156, -62, 134);
+        ctxS.lineTo(-72, 76);
+        ctxS.bezierCurveTo(-80, 62, -100, 56, -110, 36);
+        ctxS.bezierCurveTo(-118, 14, -106, -4, -106, -24);
+        ctxS.bezierCurveTo(-112, -84, -88, -146, 0, -146);
+        ctxS.closePath();
+        ctxS.fill();
+
+        [-78, 78].forEach((sx, idx) => {
+            const dir = idx === 0 ? -1 : 1;
+            const sGrad = ctxS.createRadialGradient(sx, 48, 4, sx, 48, 44);
+            sGrad.addColorStop(0, 'rgba(0,0,0,0.94)');
+            sGrad.addColorStop(0.65, 'rgba(9,9,11,0.75)');
+            sGrad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctxS.fillStyle = sGrad;
+            ctxS.beginPath();
+            ctxS.ellipse(sx, 48, 28, 42, dir * -0.28, 0, Math.PI * 2);
+            ctxS.fill();
+        });
+
+        [-48, 48].forEach((ox, idx) => {
+            const dir = idx === 0 ? -1 : 1;
+            ctxS.fillStyle = '#010102';
+            ctxS.beginPath();
+            ctxS.moveTo(ox - dir * 38, -16);
+            ctxS.bezierCurveTo(ox - dir * 40, -38, ox + dir * 30, -36, ox + dir * 32, -8);
+            ctxS.bezierCurveTo(ox + dir * 34, 22, ox - dir * 32, 24, ox - dir * 38, -16);
+            ctxS.closePath();
+            ctxS.fill();
+        });
+
+        ctxS.fillStyle = '#020203';
+        ctxS.beginPath();
+        ctxS.moveTo(0, 6);
+        ctxS.bezierCurveTo(18, 28, 24, 54, 14, 62);
+        ctxS.lineTo(3, 54);
+        ctxS.lineTo(0, 26);
+        ctxS.lineTo(-3, 54);
+        ctxS.lineTo(-14, 62);
+        ctxS.bezierCurveTo(-24, 54, -18, 28, 0, 6);
+        ctxS.closePath();
+        ctxS.fill();
+
+        ctxS.fillStyle = '#050507';
+        ctxS.beginPath();
+        ctxS.roundRect(-54, 74, 108, 52, 12);
+        ctxS.fill();
+
+        const dientesX = [-46, -35, -24, -13, -1, 11, 22, 33, 43];
+        dientesX.forEach((dx, i) => {
+            const wD = (i === 3 || i === 4) ? 10 : 8.5;
+            const hSup = 22 + ((i % 2) * 2);
+            ctxS.fillStyle = '#e4e4e7';
+            ctxS.beginPath();
+            ctxS.roundRect(dx, 76, wD, hSup, [2, 2, 4, 4]);
+            ctxS.roundRect(dx + 0.6, 100, wD - 1.2, 21, [4, 4, 2, 2]);
+            ctxS.fill();
+        });
+        ctxS.restore();
+
+        const imgSkull = ctxS.getImageData(0, 0, W, H);
+        const dS = imgSkull.data;
+        for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+                const idx = (y * W + x) * 4;
+                const nx = (x - W / 2) / (W * 0.46);
+                const ny = (y - H / 2) / (H * 0.48);
+                const vig = Math.max(0, 1 - Math.pow(nx * nx + ny * ny, 1.35));
+                const n = fbmN7(x * 0.09, y * 0.09);
+                const stipple = (hash2D_N7(x, y) - 0.5) * 78;
+                let lum = dS[idx] * vig;
+                if (lum > 8) lum = lum * (0.72 + n * 0.55) + stipple;
+                lum = Math.max(0, Math.min(255, lum));
+                dS[idx] = dS[idx + 1] = dS[idx + 2] = lum;
+            }
+        }
+        ctxS.putImageData(imgSkull, 0, 0);
+        motorGraficoN7.texCalavera = cSkull;
+
+        // 2. PESADILLA ROJA
+        const cRed = document.createElement('canvas');
+        cRed.width = W;
+        cRed.height = H;
+        const ctxR = cRed.getContext('2d');
+        const bgRed = ctxR.createRadialGradient(W * 0.5, H * 0.52, 16, W * 0.5, H * 0.5, W * 0.55);
+        bgRed.addColorStop(0, '#fb923c');
+        bgRed.addColorStop(0.32, '#dc2626');
+        bgRed.addColorStop(0.68, '#450a0a');
+        bgRed.addColorStop(1, '#040101');
+        ctxR.fillStyle = bgRed;
+        ctxR.fillRect(0, 0, W, H);
+
+        for (let y = 0; y < H; y += 3) {
+            for (let x = 0; x < W; x += 4) {
+                if ((x + y) % 2 === 0) {
+                    ctxR.fillStyle = 'rgba(0, 0, 0, 0.36)';
+                    ctxR.fillRect(x, y, 2, 2);
+                }
+            }
+        }
+
+        const o1x = W * 0.31, o1y = H * 0.37, rOjo = 62;
+        const gradOjo1 = ctxR.createRadialGradient(o1x - 14, o1y - 14, 6, o1x, o1y, rOjo);
+        gradOjo1.addColorStop(0, '#fff1f2');
+        gradOjo1.addColorStop(0.42, '#fca5a5');
+        gradOjo1.addColorStop(0.75, '#b91c1c');
+        gradOjo1.addColorStop(1, '#140202');
+        ctxR.fillStyle = gradOjo1;
+        ctxR.beginPath();
+        ctxR.arc(o1x, o1y, rOjo, 0, Math.PI * 2);
+        ctxR.fill();
+
+        const ix = o1x + 7, iy = o1y + 9;
+        ctxR.fillStyle = '#451a03';
+        ctxR.beginPath();
+        ctxR.arc(ix, iy, 27, 0, Math.PI * 2);
+        ctxR.fill();
+        ctxR.fillStyle = '#050101';
+        ctxR.beginPath();
+        ctxR.arc(ix, iy, 12, 0, Math.PI * 2);
+        ctxR.fill();
+        ctxR.fillStyle = '#ffffff';
+        ctxR.beginPath();
+        ctxR.ellipse(o1x - 21, o1y - 21, 9, 6, -0.5, 0, Math.PI * 2);
+        ctxR.fill();
+
+        const o2x = W * 0.70, o2y = H * 0.37;
+        ctxR.save();
+        ctxR.beginPath();
+        ctxR.ellipse(o2x, o2y, 72, 46, -0.06, 0, Math.PI * 2);
+        ctxR.fillStyle = '#140202';
+        ctxR.fill();
+        ctxR.clip();
+        ctxR.fillStyle = '#020101';
+        ctxR.beginPath();
+        ctxR.arc(o2x - 4, o2y + 3, 33, 0, Math.PI * 2);
+        ctxR.fill();
+        ctxR.fillStyle = '#fee2e2';
+        ctxR.beginPath();
+        ctxR.arc(o2x - 13, o2y - 9, 3.8, 0, Math.PI * 2);
+        ctxR.arc(o2x + 3, o2y - 10, 3.2, 0, Math.PI * 2);
+        ctxR.fill();
+        ctxR.restore();
+
+        ctxR.save();
+        ctxR.beginPath();
+        ctxR.moveTo(W * 0.11, H * 0.52);
+        ctxR.quadraticCurveTo(W * 0.50, H * 0.67, W * 0.89, H * 0.50);
+        ctxR.bezierCurveTo(W * 0.84, H * 0.94, W * 0.16, H * 0.94, W * 0.11, H * 0.52);
+        ctxR.closePath();
+        ctxR.fillStyle = '#450a0a';
+        ctxR.fill();
+        ctxR.clip();
+        const colsDientes = 12;
+        const pasoD = (W * 0.74) / colsDientes;
+        for (let i = 0; i < colsDientes; i++) {
+            const dx = W * 0.13 + i * pasoD;
+            const arcoY = Math.sin((i / (colsDientes - 1)) * Math.PI) * 34;
+            const hD = 24 + (i % 3) * 4;
+            ctxR.fillStyle = '#fecaca';
+            ctxR.beginPath();
+            ctxR.roundRect(dx + 1, H * 0.54 + arcoY, pasoD - 2.5, hD, 6);
+            ctxR.roundRect(dx + 1.5, H * 0.56 + arcoY + hD, pasoD - 3, hD * 0.9, 6);
+            ctxR.fill();
+        }
+        ctxR.restore();
+        motorGraficoN7.texPesadillaRoja = cRed;
+
+        // 3. SOMBRA NEGRA CON SANGRE GRANULAR Y BOCA HUMANA
+        const cDark = document.createElement('canvas');
+        cDark.width = W;
+        cDark.height = H;
+        const ctxD = cDark.getContext('2d');
+        ctxD.fillStyle = '#010102';
+        ctxD.fillRect(0, 0, W, H);
+
+        const imgDark = ctxD.getImageData(0, 0, W, H);
+        const dD = imgDark.data;
+        const focosSangre = [
+            { x: W * 0.27, y: H * 0.48, rx: 52, ry: 44 },
+            { x: W * 0.72, y: H * 0.58, rx: 46, ry: 54 },
+            { x: W * 0.50, y: H * 0.76, rx: 95, ry: 58 },
+            { x: W * 0.49, y: H * 0.41, rx: 22, ry: 16 }
+        ];
+        for (let y = 0; y < H; y++) {
+            for (let x = 0; x < W; x++) {
+                let intS = 0;
+                for (let f = 0; f < focosSangre.length; f++) {
+                    const fc = focosSangre[f];
+                    const dist = Math.hypot((x - fc.x) / fc.rx, (y - fc.y) / fc.ry);
+                    if (dist < 1.25) intS = Math.max(intS, 1.25 - dist);
+                }
+                if (intS > 0) {
+                    const val = intS * fbmN7(x * 0.06, y * 0.06) * 1.45 + (hash2D_N7(x, y) - 0.45) * 0.35;
+                    if (val > 0.32) {
+                        const idx = (y * W + x) * 4;
+                        dD[idx] = Math.min(255, Math.floor(val * 235));
+                        dD[idx + 1] = Math.min(40, Math.floor(val * 18));
+                        dD[idx + 2] = Math.min(40, Math.floor(val * 18));
+                    }
+                }
+            }
+        }
+        ctxD.putImageData(imgDark, 0, 0);
+
+        [W * 0.31, W * 0.69].forEach(ex => {
+            const ey = H * 0.28;
+            ctxD.fillStyle = '#e0f2fe';
+            ctxD.beginPath();
+            ctxD.arc(ex, ey, 11, 0, Math.PI * 2);
+            ctxD.fill();
+            ctxD.fillStyle = '#020203';
+            ctxD.beginPath();
+            ctxD.arc(ex, ey, 3.2, 0, Math.PI * 2);
+            ctxD.fill();
+        });
+
+        const bw = W * 0.32, bh = H * 0.24, bx = W * 0.50 - bw / 2, by = H * 0.48;
+        ctxD.save();
+        ctxD.beginPath();
+        ctxD.roundRect(bx, by, bw, bh, 10);
+        ctxD.fillStyle = '#450a0a';
+        ctxD.fill();
+        ctxD.clip();
+        const anchosD = [0.12, 0.16, 0.22, 0.22, 0.16, 0.12];
+        let curX = bx + 3;
+        anchosD.forEach(frac => {
+            const dw = (bw - 6) * frac;
+            ctxD.fillStyle = '#ffffff';
+            ctxD.beginPath();
+            ctxD.roundRect(curX + 0.8, by + bh * 0.14, dw - 1.6, bh * 0.36, 4);
+            ctxD.roundRect(curX + 1.2, by + bh * 0.51, dw - 2.4, bh * 0.35, 4);
+            ctxD.fill();
+            curX += dw;
+        });
+        ctxD.restore();
+        motorGraficoN7.texSombraBoca = cDark;
+
+        // 4. BUFFER ESTÁTICA Y VIDRIO CRT CURVO
+        const cStatic = document.createElement('canvas');
+        cStatic.width = 240;
+        cStatic.height = 180;
+        motorGraficoN7.bufferEstatica = cStatic;
+
+        const cGlass = document.createElement('canvas');
+        cGlass.width = W;
+        cGlass.height = H;
+        const ctxG = cGlass.getContext('2d');
+        for (let y = 0; y < H; y += 3) {
+            ctxG.fillStyle = 'rgba(0, 0, 0, 0.28)';
+            ctxG.fillRect(0, y, W, 1.4);
+        }
+        const vigCRT = ctxG.createRadialGradient(W / 2, H / 2, W * 0.28, W / 2, H / 2, W * 0.58);
+        vigCRT.addColorStop(0, 'rgba(0, 0, 0, 0)');
+        vigCRT.addColorStop(0.75, 'rgba(0, 0, 0, 0.18)');
+        vigCRT.addColorStop(1, 'rgba(0, 0, 0, 0.68)');
+        ctxG.fillStyle = vigCRT;
+        ctxG.fillRect(0, 0, W, H);
+        motorGraficoN7.texVidrioCRT = cGlass;
+    }
+
+    function iniciarNivel7() {
+        cancelAnimationFrame(animacionIdNivel7);
+        clearInterval(intervaloContador);
+        textoContador = '';
+
+        inicializarMotorPixelShaderN7();
+
+        if (typeof activarPantallaCompletaParte2 === 'function') {
+            activarPantallaCompletaParte2();
+        }
+
+        const w = canvas.width;
+        const h = canvas.height;
+
+        jugador.tam = 46;
+        jugador.vidasMax = 10;
+        jugador.vidas = 10;
+        jugador.invulnerableHasta = 0;
+        if (typeof actualizarCorazonesUI === 'function') actualizarCorazonesUI();
+
+        estadoMarineP2.escudoActivo = false;
+        estadoMarineP2.escudoGolpesRestantes = 3;
+        estadoMarineP2.escudoRoto = false;
+        estadoMarineP2.disparando = false;
+        estadoMarineP2.balas = [];
+        estadoMarineP2.particulas = [];
+        estadoMarineP2.anguloTopDown = -Math.PI / 2;
+        if (typeof actualizarHudMarineP2 === 'function') actualizarHudMarineP2();
+
+        const hudDerecha = document.querySelector('.hud-juego span:last-child');
+        if (hudDerecha) {
+            hudDerecha.textContent = '[← → ↑ ↓ / WASD] MOVER | [ESPACIO] DISPARAR | [E] ESCUDO';
+        }
+
+        playerN7 = {
+            x: w / 2 - jugador.tam / 2,
+            y: h * 0.78,
+            vel: 6.6
+        };
+
+        // Limpiar entidades de batalla
+        proyectilesJefeN7 = [];
+        laseresJefeN7 = [];
+        ondasJefeN7 = [];
+        dronesJefeN7 = [];
+        mandibulasJefeN7 = [];
+        corazonesCurativosN7 = [];
+        floatingTextsN7 = [];
+
+        const ahora = Date.now();
+        proximoCorazonN7 = ahora + 18000;
+
+        jefeTV_N7 = {
+            x: w / 2,
+            y: h * 0.30,
+            anchoPantalla: Math.min(370, w * 0.37),
+            altoPantalla: Math.min(265, h * 0.33),
+            vida: 15000,
+            vidaMax: 15000,
+            fase: 1,
+            caraFase1: 0,
+            caraFase2: 1,
+            proximoCambioCara: ahora + 1300,
+            proximoAtaque: ahora + 1100,
+            ultimoPatron: -1,
+            anguloEspiral: 0,
+            flashHasta: 0,
+            glitchHasta: 0,
+            muerto: false
+        };
+
+        cablesFondoN7 = [];
+        for (let i = 0; i < 16; i++) {
+            cablesFondoN7.push({
+                x1: (w / 15) * i,
+                y1: 0,
+                cx: w / 2 + (i - 7.5) * 90,
+                cy: h * 0.30,
+                x2: (w / 15) * i + ((i % 2 === 0) ? 75 : -75),
+                y2: h,
+                grosor: 6 + (i % 4) * 3,
+                fase: i * 0.65
+            });
+        }
+
+        chispasFondoN7 = [];
+        for (let i = 0; i < 65; i++) {
+            chispasFondoN7.push({
+                x: Math.random() * w,
+                y: Math.random() * h,
+                vy: -0.5 - Math.random() * 1.4,
+                tam: 1.5 + Math.random() * 2.5,
+                color: i % 3 === 0 ? '#ef4444' : (i % 3 === 1 ? '#2dd4bf' : '#a855f7')
+            });
+        }
+
+        // Arrancar la primera canción: /static/audio/All_In_at_Midnight.mp3
+        iniciarMusicaNivel7(1);
+
+        puedeMoverse = true;
+        document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 7 — FASE 1: SEÑAL VINTAGE B/N (15,000 HP)';
+        bucleNivel7();
+    }
+
+    // Tecla rápida [H] opcional de prueba para bajar 1,000 HP al jefe
+    window.addEventListener('keydown', e => {
+        if (juegoActivo && nivelActual === 7 && e.code === 'KeyH' && jefeTV_N7 && !jefeTV_N7.muerto) {
+            jefeTV_N7.vida = Math.max(0, jefeTV_N7.vida - 1000);
+            jefeTV_N7.flashHasta = Date.now() + 90;
+            jefeTV_N7.glitchHasta = Date.now() + 260;
+        }
+    });
+
+    // ============================================================
+    // SISTEMA DE DAÑO AL JUGADOR Y ESCUDO [E] EN NIVEL 7
+    // ============================================================
+    function daniarJugadorN7(ahora, px, py) {
+        if (jugador.vidas <= 0) return;
+
+        if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) {
+            estadoMarineP2.escudoGolpesRestantes--;
+            jugador.invulnerableHasta = ahora + 450;
+            floatingTextsN7.push({
+                x: px,
+                y: py - 24,
+                texto: estadoMarineP2.escudoGolpesRestantes > 0 ? `ESCUDO (${estadoMarineP2.escudoGolpesRestantes})` : '¡ESCUDO ROTO!',
+                color: '#38bdf8',
+                vida: 45
+            });
+            if (estadoMarineP2.escudoGolpesRestantes <= 0) {
+                estadoMarineP2.escudoActivo = false;
+                estadoMarineP2.escudoRoto = true;
+            }
+            if (typeof actualizarHudMarineP2 === 'function') actualizarHudMarineP2();
+            return;
+        }
+
+        if (ahora < jugador.invulnerableHasta) return;
+
+        jugador.vidas = Math.max(0, jugador.vidas - 1);
+        jugador.invulnerableHasta = ahora + 1100;
+        if (typeof actualizarCorazonesUI === 'function') actualizarCorazonesUI();
+
+        floatingTextsN7.push({
+            x: px,
+            y: py - 24,
+            texto: '-1 ❤️',
+            color: '#ef4444',
+            vida: 50
+        });
+
+        if (jugador.vidas <= 0) {
+            puedeMoverse = false;
+            detenerMusicaNivel7();
+            textoContador = '¡SEÑAL INTERRUMPIDA! (GAME OVER)';
+            setTimeout(() => {
+                if (juegoActivo && nivelActual === 7 && jugador.vidas <= 0) {
+                    iniciarNivel7();
+                }
+            }, 2200);
+        }
+    }
+
+    // ============================================================
+    // GENERADOR DE ATAQUES DEL JEFE (FASE 1 B/N Y FASE 2 FURIA)
+    // ============================================================
+    function ejecutarAtaqueJefeN7(tv, jugCx, jugCy, w, h, ahora, esCombo = false) {
+        const sw = tv.anchoPantalla;
+        const sh = tv.altoPantalla;
+
+        if (tv.fase === 1) {
+            // --- FASE 1 (15,000 -> 7,001 HP): 7 ATAQUES MONOCROMÁTICOS CRT ---
+            let patron = Math.floor(Math.random() * 7);
+            if (patron === tv.ultimoPatron) patron = (patron + 1) % 7;
+            tv.ultimoPatron = patron;
+
+            if (patron === 0) {
+                // 1. RÁFAGA DE CÁMARAS LATERALES EN ABANICO B/N
+                tv.caraFase1 = 0;
+                const camIzqX = tv.x - sw * 0.88;
+                const camDerX = tv.x + sw * 0.88;
+                const camY = tv.y - sh * 0.18;
+
+                [camIzqX, camDerX].forEach((cx, idx) => {
+                    const baseAng = Math.atan2(jugCy - camY, jugCx - cx);
+                    for (let i = -2; i <= 2; i++) {
+                        const ang = baseAng + i * 0.16;
+                        const vel = 5.8 + Math.abs(i) * 0.35;
+                        proyectilesJefeN7.push({
+                            x: cx,
+                            y: camY,
+                            vx: Math.cos(ang) * vel,
+                            vy: Math.sin(ang) * vel,
+                            radio: 8,
+                            tipo: 'crt_orbe_bn',
+                            color: idx === 0 ? '#ffffff' : '#a1a1aa'
+                        });
+                    }
+                });
+                tv.proximoAtaque = ahora + 1450;
+
+            } else if (patron === 1) {
+                // 2. MURO DE BARRAS DE PRUEBA HORIZONTAL CON HUECO SEGURO
+                tv.caraFase1 = 1;
+                const columnas = 13;
+                const anchoCol = (w - 110) / columnas;
+                const hueco = 2 + Math.floor(Math.random() * (columnas - 4));
+
+                for (let c = 0; c < columnas; c++) {
+                    if (c === hueco || c === hueco + 1) continue;
+                    proyectilesJefeN7.push({
+                        x: 55 + c * anchoCol + anchoCol / 2,
+                        y: tv.y + sh * 0.55,
+                        vx: 0,
+                        vy: 5.1,
+                        ancho: anchoCol - 6,
+                        alto: 22,
+                        tipo: 'barra_tv_bn',
+                        color: c % 2 === 0 ? '#f4f4f5' : '#71717a'
+                    });
+                }
+                tv.proximoAtaque = ahora + 1600;
+
+            } else if (patron === 2) {
+                // 3. ONDA EXPANSIVA DE ESTÁTICA CRT
+                tv.caraFase1 = 2;
+                ondasJefeN7.push({
+                    x: tv.x,
+                    y: tv.y,
+                    radio: 45,
+                    velRadio: 4.9,
+                    maxRadio: Math.hypot(w, h) * 0.78,
+                    grosor: 12,
+                    huecoAng: Math.atan2(jugCy - tv.y, jugCx - tv.x),
+                    anchoHueco: 0.76,
+                    color: '#f4f4f5',
+                    fase: 1
+                });
+                tv.proximoAtaque = ahora + 1500;
+
+            } else if (patron === 3) {
+                // 4. RAYOS VERTICALES DE TUBO CATÓDICO (CON AVISO PREVIO)
+                tv.caraFase1 = 2;
+                const posicionesX = [
+                    jugCx,
+                    Math.max(90, jugCx - 205),
+                    Math.min(w - 90, jugCx + 205)
+                ];
+                posicionesX.forEach(lx => {
+                    laseresJefeN7.push({
+                        x1: lx,
+                        y1: 0,
+                        x2: lx,
+                        y2: h,
+                        ancho: 38,
+                        avisoHasta: ahora + 720,
+                        finHasta: ahora + 1060,
+                        color: '#ffffff',
+                        fase: 1
+                    });
+                });
+                tv.proximoAtaque = ahora + 1500;
+
+            } else if (patron === 4) {
+                // 5. CABLES DE ALTA TENSIÓN EN "X" (LÁTIGOS ELÉCTRICOS B/N)
+                tv.caraFase1 = 0;
+                const diagonales = [
+                    { x1: 40, y1: 40, x2: w - 40, y2: h - 40 },
+                    { x1: w - 40, y1: 40, x2: 40, y2: h - 40 }
+                ];
+                diagonales.forEach(d => {
+                    laseresJefeN7.push({
+                        x1: d.x1,
+                        y1: d.y1,
+                        x2: d.x2,
+                        y2: d.y2,
+                        ancho: 32,
+                        avisoHasta: ahora + 760,
+                        finHasta: ahora + 1100,
+                        color: '#e4e4e7',
+                        fase: 1
+                    });
+                });
+                tv.proximoAtaque = ahora + 1550;
+
+            } else if (patron === 5) {
+                // 6. ENJAMBRE DE DRONES DE ESTÁTICA PERSEGUIDORES (DESTRUCTIBLES)
+                tv.caraFase1 = 1;
+                const puntosSpawn = [
+                    { x: tv.x - sw * 0.85, y: tv.y },
+                    { x: tv.x + sw * 0.85, y: tv.y },
+                    { x: tv.x - sw * 0.45, y: tv.y + sh * 0.55 },
+                    { x: tv.x + sw * 0.45, y: tv.y + sh * 0.55 }
+                ];
+                puntosSpawn.forEach(pt => {
+                    dronesJefeN7.push({
+                        x: pt.x,
+                        y: pt.y,
+                        vel: 3.1,
+                        vida: 30,
+                        tam: 22,
+                        expiraEn: ahora + 3800
+                    });
+                });
+                tv.proximoAtaque = ahora + 1700;
+
+            } else {
+                // 7. INTERFERENCIA DE PANTALLA DIVIDIDA (BARRIDO HORIZONTAL CON VENTANA)
+                tv.caraFase1 = 2;
+                const huecoX = 140 + Math.random() * (w - 280);
+                const anchoVentana = 145;
+                if (huecoX - anchoVentana / 2 > 45) {
+                    proyectilesJefeN7.push({
+                        x: (45 + (huecoX - anchoVentana / 2)) / 2,
+                        y: tv.y + sh * 0.52,
+                        vx: 0,
+                        vy: 4.9,
+                        ancho: (huecoX - anchoVentana / 2) - 45,
+                        alto: 24,
+                        tipo: 'barra_tv_bn',
+                        color: '#ffffff'
+                    });
+                }
+                if (w - 45 - (huecoX + anchoVentana / 2) > 45) {
+                    proyectilesJefeN7.push({
+                        x: ((huecoX + anchoVentana / 2) + (w - 45)) / 2,
+                        y: tv.y + sh * 0.52,
+                        vx: 0,
+                        vy: 4.9,
+                        ancho: (w - 45) - (huecoX + anchoVentana / 2),
+                        alto: 24,
+                        tipo: 'barra_tv_bn',
+                        color: '#d4d4d8'
+                    });
+                }
+                tv.proximoAtaque = ahora + 1500;
+            }
+
+        } else {
+            // --- FASE 2 (<= 7,000 HP — MODO ENOJADO): 8 ATAQUES DE PESADILLA OMEGA CRT ---
+            let patron = Math.floor(Math.random() * 8);
+            if (patron === tv.ultimoPatron) patron = (patron + 1) % 8;
+            tv.ultimoPatron = patron;
+
+            if (patron === 0) {
+                // 1. ESPIRAL DE PESADILLA CARMESÍ Y CIAN CORRUPTO
+                tv.caraFase2 = 1;
+                const brazos = 12;
+                tv.anguloEspiral += 0.44;
+                for (let i = 0; i < brazos; i++) {
+                    const ang = tv.anguloEspiral + (Math.PI * 2 / brazos) * i;
+                    proyectilesJefeN7.push({
+                        x: tv.x,
+                        y: tv.y,
+                        vx: Math.cos(ang) * 6.5,
+                        vy: Math.sin(ang) * 6.5,
+                        radio: 9,
+                        tipo: 'orbe_terror',
+                        color: i % 2 === 0 ? '#ef4444' : '#2dd4bf'
+                    });
+                }
+                setTimeout(() => {
+                    if (!juegoActivo || nivelActual !== 7 || !jefeTV_N7 || jefeTV_N7.muerto) return;
+                    for (let i = 0; i < brazos; i++) {
+                        const ang = tv.anguloEspiral + 0.26 + (Math.PI * 2 / brazos) * i;
+                        proyectilesJefeN7.push({
+                            x: jefeTV_N7.x,
+                            y: jefeTV_N7.y,
+                            vx: Math.cos(ang) * 6.9,
+                            vy: Math.sin(ang) * 6.9,
+                            radio: 8.5,
+                            tipo: 'orbe_terror',
+                            color: '#f97316'
+                        });
+                    }
+                }, 320);
+                if (!esCombo) tv.proximoAtaque = ahora + 1020;
+
+            } else if (patron === 1) {
+                // 2. LLUVIA DE COLMILLOS DESDE LOS BORDES DE LA ARENA
+                tv.caraFase2 = 0;
+                for (let k = 0; k < 8; k++) {
+                    const desdeIzq = k % 2 === 0;
+                    const sy = h * 0.42 + k * ((h * 0.52) / 8);
+                    proyectilesJefeN7.push({
+                        x: desdeIzq ? 25 : w - 25,
+                        y: sy,
+                        vx: desdeIzq ? 7.8 : -7.8,
+                        vy: (Math.random() - 0.5) * 1.3,
+                        radio: 11,
+                        tipo: 'colmillo_terror',
+                        color: '#fecaca'
+                    });
+                }
+                if (!esCombo) tv.proximoAtaque = ahora + 1100;
+
+            } else if (patron === 2) {
+                // 3. QUÍNTUPLE LÁSER OMEGA EN ABANICO HACIA EL JUGADOR
+                tv.caraFase2 = 2;
+                const baseAng = Math.atan2(jugCy - tv.y, jugCx - tv.x);
+                [-0.52, -0.26, 0, 0.26, 0.52].forEach(offset => {
+                    const ang = baseAng + offset;
+                    laseresJefeN7.push({
+                        x1: tv.x,
+                        y1: tv.y,
+                        x2: tv.x + Math.cos(ang) * 1450,
+                        y2: tv.y + Math.sin(ang) * 1450,
+                        ancho: 32,
+                        avisoHasta: ahora + 680,
+                        finHasta: ahora + 1020,
+                        color: '#ef4444',
+                        fase: 2
+                    });
+                });
+                if (!esCombo) tv.proximoAtaque = ahora + 1120;
+
+            } else if (patron === 3) {
+                // 4. PULSO ABISAL CONCÉNTRICO + RÁFAGA TELEDERIGIDA
+                tv.caraFase2 = 3;
+                ondasJefeN7.push({
+                    x: tv.x,
+                    y: tv.y,
+                    radio: 45,
+                    velRadio: 6.4,
+                    maxRadio: Math.hypot(w, h) * 0.80,
+                    grosor: 14,
+                    huecoAng: Math.atan2(jugCy - tv.y, jugCx - tv.x) + 0.55,
+                    anchoHueco: 0.72,
+                    color: '#ef4444',
+                    fase: 2
+                });
+
+                const angJugador = Math.atan2(jugCy - tv.y, jugCx - tv.x);
+                for (let j = -2; j <= 2; j++) {
+                    const a = angJugador + j * 0.13;
+                    proyectilesJefeN7.push({
+                        x: tv.x,
+                        y: tv.y + 30,
+                        vx: Math.cos(a) * 8.4,
+                        vy: Math.sin(a) * 8.4,
+                        radio: 10,
+                        tipo: 'orbe_terror',
+                        color: '#fbbf24'
+                    });
+                }
+                if (!esCombo) tv.proximoAtaque = ahora + 1050;
+
+            } else if (patron === 4) {
+                // 5. JAULA DE LÁSERES GIRATORIOS (RELOJ DE LA MUERTE)
+                tv.caraFase2 = 1;
+                const angInicio = Math.random() * Math.PI;
+                for (let b = 0; b < 4; b++) {
+                    const a = angInicio + (Math.PI / 2) * b;
+                    laseresJefeN7.push({
+                        x1: tv.x,
+                        y1: tv.y,
+                        x2: tv.x + Math.cos(a) * 1450,
+                        y2: tv.y + Math.sin(a) * 1450,
+                        ancho: 28,
+                        avisoHasta: ahora + 620,
+                        finHasta: ahora + 2600,
+                        giratorio: true,
+                        angActual: a,
+                        velGiro: 0.014,
+                        origenX: tv.x,
+                        origenY: tv.y,
+                        color: '#dc2626',
+                        fase: 2
+                    });
+                }
+                if (!esCombo) tv.proximoAtaque = ahora + 1650;
+
+            } else if (patron === 5) {
+                // 6. MORDIDA ABISAL (MANDÍBULAS GIGANTES QUE SE CIERRAN)
+                tv.caraFase2 = 0;
+                const horizontal = Math.random() < 0.5;
+                if (horizontal) {
+                    const pasilloY = h * 0.55 + (Math.random() - 0.5) * 140;
+                    mandibulasJefeN7.push({
+                        horizontal: true,
+                        pasillo: pasilloY,
+                        anchoPasillo: 135,
+                        progreso: 0,
+                        vel: 0.024
+                    });
+                } else {
+                    const pasilloX = w * 0.50 + (Math.random() - 0.5) * 260;
+                    mandibulasJefeN7.push({
+                        horizontal: false,
+                        pasillo: pasilloX,
+                        anchoPasillo: 145,
+                        progreso: 0,
+                        vel: 0.024
+                    });
+                }
+                if (!esCombo) tv.proximoAtaque = ahora + 1350;
+
+            } else if (patron === 6) {
+                // 7. BULLET HELL DE PROYECTILES QUE REBOTAN EN LOS BORDES
+                tv.caraFase2 = 3;
+                for (let r = 0; r < 14; r++) {
+                    const ang = (Math.PI * 0.15) + (r / 13) * (Math.PI * 0.70);
+                    const vel = 5.8 + (r % 3) * 0.9;
+                    proyectilesJefeN7.push({
+                        x: tv.x,
+                        y: tv.y + 25,
+                        vx: Math.cos(ang) * vel,
+                        vy: Math.sin(ang) * vel,
+                        radio: 9.5,
+                        rebotes: 1,
+                        tipo: 'orbe_terror',
+                        color: r % 3 === 0 ? '#ef4444' : (r % 3 === 1 ? '#38bdf8' : '#ffffff')
+                    });
+                }
+                if (!esCombo) tv.proximoAtaque = ahora + 1150;
+
+            } else {
+                // 8. BOMBARDEO DE DRONES CORRUPTOS + RÁFAGA CARMESÍ
+                tv.caraFase2 = 2;
+                for (let d = 0; d < 5; d++) {
+                    dronesJefeN7.push({
+                        x: tv.x + (d - 2) * 85,
+                        y: tv.y + sh * 0.45,
+                        vel: 4.1,
+                        vida: 30,
+                        tam: 24,
+                        furia: true,
+                        expiraEn: ahora + 3400
+                    });
+                }
+                if (!esCombo) tv.proximoAtaque = ahora + 1200;
+            }
+
+            // SOBRECARGA DE FURIA (< 2,500 HP): ENCADENA UN SEGUNDO ATAQUE EXTRA
+            if (!esCombo && tv.vida <= 2500) {
+                ejecutarAtaqueJefeN7(tv, jugCx, jugCy, w, h, ahora, true);
+                tv.proximoAtaque = ahora + 1280;
+            }
+        }
+    }
+
+    // ============================================================
+    // ESCENARIO DEL NIVEL 7
+    // ============================================================
+    function dibujarEscenarioNivel7(w, h, ahora, fase) {
+        const bgGrad = ctx.createRadialGradient(w / 2, h * 0.30, 30, w / 2, h * 0.5, Math.max(w, h) * 0.78);
+        if (fase === 1) {
+            bgGrad.addColorStop(0, '#18181b');
+            bgGrad.addColorStop(0.48, '#09090b');
+            bgGrad.addColorStop(1, '#020203');
+        } else {
+            bgGrad.addColorStop(0, '#360718');
+            bgGrad.addColorStop(0.45, '#120514');
+            bgGrad.addColorStop(1, '#030105');
+        }
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        cablesFondoN7.forEach(c => {
+            const osc = Math.sin(ahora / 340 + c.fase) * 20;
+            ctx.strokeStyle = '#09090b';
+            ctx.lineWidth = c.grosor + 4;
+            ctx.beginPath();
+            ctx.moveTo(c.x1, c.y1);
+            ctx.quadraticCurveTo(c.cx + osc, c.cy, c.x2, c.y2);
+            ctx.stroke();
+
+            ctx.strokeStyle = fase === 1 ? '#3f3f46' : '#27272a';
+            ctx.lineWidth = c.grosor * 0.45;
+            ctx.beginPath();
+            ctx.moveTo(c.x1, c.y1);
+            ctx.quadraticCurveTo(c.cx + osc, c.cy, c.x2, c.y2);
+            ctx.stroke();
+        });
+
+        ctx.strokeStyle = fase === 1 ? 'rgba(161, 161, 170, 0.08)' : 'rgba(239, 68, 68, 0.10)';
+        ctx.lineWidth = 1.5;
+        for (let gx = 0; gx < w; gx += 68) {
+            ctx.beginPath();
+            ctx.moveTo(gx, 0);
+            ctx.lineTo(gx, h);
+            ctx.stroke();
+        }
+        for (let gy = 0; gy < h; gy += 68) {
+            ctx.beginPath();
+            ctx.moveTo(0, gy);
+            ctx.lineTo(w, gy);
+            ctx.stroke();
+        }
+
+        chispasFondoN7.forEach(p => {
+            p.y += p.vy;
+            if (p.y < 0) p.y = h;
+            ctx.fillStyle = fase === 1 ? '#a1a1aa' : p.color;
+            ctx.fillRect(p.x, p.y, p.tam, p.tam);
+        });
+    }
+
+    // ============================================================
+    // HELPER: BARRAS DE PRUEBA EN BLANCO, NEGRO Y GRIS (TELE ANTIGUA)
+    // ============================================================
+    function dibujarBarrasGrisesTV(sw, sh) {
+        const tonosGrises = ['#ffffff', '#d4d4d8', '#a1a1aa', '#71717a', '#3f3f46', '#18181b'];
+        const anchoCol = sw / tonosGrises.length;
+        tonosGrises.forEach((col, idx) => {
+            ctx.fillStyle = col;
+            ctx.fillRect(-sw / 2 + idx * anchoCol, -sh / 2, anchoCol + 1, sh);
+        });
+    }
+
+    // ============================================================
+    // CARAS DE FASE 1 (15,000 HP -> 7,001 HP): 100% BLANCO, NEGRO Y GRIS
+    // ============================================================
+    function dibujarCaraFase1N7(tipo, sw, sh, ahora, enGlitch) {
+        ctx.save();
+        ctx.filter = 'grayscale(100%) contrast(115%)';
+
+        if (tipo === 0) {
+            dibujarBarrasGrisesTV(sw, sh);
+
+            ctx.fillStyle = '#f4f4f5';
+            ctx.strokeStyle = '#09090b';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.ellipse(0, -sh * 0.25, sw * 0.48, sh * 0.44, 0, 0, Math.PI);
+            ctx.fill();
+            ctx.stroke();
+
+            const lookX = Math.sin(ahora / 260) * 6;
+            const lookY = Math.cos(ahora / 310) * 4;
+
+            ctx.fillStyle = '#ffffff';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.ellipse(-sw * 0.11 + lookX, -sh * 0.14 + lookY, 21, 28, 0.08, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.ellipse(sw * 0.10 + lookX, -sh * 0.13 + lookY, 15, 20, -0.06, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.lineWidth = 4.5;
+            ctx.beginPath();
+            ctx.arc(-sw * 0.11, -sh * 0.24, 24, Math.PI * 1.1, Math.PI * 1.85);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(sw * 0.04, -sh * 0.26);
+            ctx.lineTo(sw * 0.11, -sh * 0.29);
+            ctx.lineTo(sw * 0.14, -sh * 0.25);
+            ctx.lineTo(sw * 0.19, -sh * 0.27);
+            ctx.stroke();
+
+        } else if (tipo === 1) {
+            dibujarBarrasGrisesTV(sw, sh);
+
+            ctx.fillStyle = '#f4f4f5';
+            ctx.strokeStyle = '#09090b';
+            ctx.lineWidth = 5.5;
+            ctx.beginPath();
+            ctx.moveTo(-sw * 0.46, -sh * 0.34);
+            ctx.quadraticCurveTo(0, sh * 0.12, sw * 0.46, -sh * 0.34);
+            ctx.lineTo(sw * 0.48, -sh * 0.50);
+            ctx.lineTo(-sw * 0.48, -sh * 0.50);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            [-sw * 0.27, sw * 0.27].forEach(rx => {
+                const rGrad = ctx.createRadialGradient(rx, -sh * 0.16, 2, rx, -sh * 0.16, 24);
+                rGrad.addColorStop(0, 'rgba(82, 82, 91, 0.55)');
+                rGrad.addColorStop(1, 'rgba(82, 82, 91, 0)');
+                ctx.fillStyle = rGrad;
+                ctx.beginPath();
+                ctx.arc(rx, -sh * 0.16, 24, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            [-sw * 0.16, sw * 0.16].forEach((ox, i) => {
+                ctx.fillStyle = '#09090b';
+                ctx.beginPath();
+                ctx.ellipse(ox, -sh * 0.24, 24, 17, i === 0 ? -0.15 : 0.15, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = '#09090b';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.arc(ox, -sh * 0.33, 18, Math.PI * 1.15, Math.PI * 1.85);
+                ctx.stroke();
+            });
+
+        } else {
+            dibujarBarrasGrisesTV(sw, sh);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#09090b';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.roundRect(-sw * 0.34, -sh * 0.38, sw * 0.68, sh * 0.58, 28);
+            ctx.fill();
+            ctx.stroke();
+
+            const vib = Math.sin(ahora / 25) * 2.5;
+            [-sw * 0.14, sw * 0.14].forEach((ex, i) => {
+                ctx.fillStyle = '#3f3f46';
+                ctx.beginPath();
+                ctx.ellipse(ex, -sh * 0.15, 25, 22, i === 0 ? -0.2 : 0.2, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.strokeStyle = '#09090b';
+                ctx.lineWidth = 3.5;
+                ctx.beginPath();
+                ctx.ellipse(ex, -sh * 0.13, 18, 15, i === 0 ? -0.2 : 0.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#09090b';
+                ctx.beginPath();
+                ctx.arc(ex + vib, -sh * 0.13 - vib, 3.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.moveTo(ex - 20, -sh * 0.26 + (i === 0 ? -4 : 4));
+                ctx.lineTo(ex + 20, -sh * 0.26 + (i === 0 ? 4 : -4));
+                ctx.stroke();
+            });
+
+            ctx.fillStyle = '#050507';
+            ctx.beginPath();
+            ctx.moveTo(-sw / 2, -sh / 2);
+            ctx.lineTo(-sw * 0.18, -sh / 2);
+            ctx.lineTo(-sw * 0.26, -sh * 0.36);
+            ctx.lineTo(-sw * 0.38, -sh * 0.38);
+            ctx.lineTo(-sw / 2, -sh * 0.18);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(sw / 2, -sh / 2);
+            ctx.lineTo(sw * 0.22, -sh / 2);
+            ctx.lineTo(sw * 0.32, -sh * 0.32);
+            ctx.lineTo(sw / 2, -sh * 0.16);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        if (enGlitch || Math.random() < 0.22) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.24)';
+            const gy = (Math.random() - 0.5) * sh * 0.85;
+            ctx.fillRect(-sw / 2, gy, sw, 5 + Math.random() * 9);
+        }
+
+        if (motorGraficoN7.texVidrioCRT) {
+            ctx.drawImage(motorGraficoN7.texVidrioCRT, -sw / 2, -sh / 2, sw, sh);
+        }
+        ctx.restore();
+    }
+
+    // ============================================================
+    // CARAS DE FASE 2 (<= 7,000 HP — ENOJADO): 4 CARAS DE TERROR A TODO COLOR
+    // ============================================================
+    function dibujarCaraFase2N7(tipoCara, sw, sh, ahora, enGlitch) {
+        ctx.fillStyle = '#020203';
+        ctx.fillRect(-sw / 2, -sh / 2, sw, sh);
+
+        if (tipoCara === 0 && motorGraficoN7.texCalavera) {
+            const pulso = 1 + Math.sin(ahora / 70) * 0.032;
+            ctx.save();
+            ctx.translate((Math.random() - 0.5) * 3.5, 0);
+            ctx.scale(pulso, pulso);
+            ctx.drawImage(motorGraficoN7.texCalavera, -sw / 2, -sh / 2, sw, sh);
+            ctx.restore();
+
+        } else if (tipoCara === 1 && motorGraficoN7.texPesadillaRoja) {
+            const pulso = 1 + Math.sin(ahora / 55) * 0.028;
+            ctx.save();
+            ctx.translate(Math.sin(ahora / 29) * 3.5, Math.cos(ahora / 33) * 2.5);
+            ctx.scale(pulso, pulso);
+            ctx.drawImage(motorGraficoN7.texPesadillaRoja, -sw / 2, -sh / 2, sw, sh);
+            ctx.restore();
+
+        } else if (tipoCara === 2 && motorGraficoN7.texSombraBoca) {
+            ctx.save();
+            ctx.translate((Math.random() - 0.5) * 2.5, 0);
+            ctx.drawImage(motorGraficoN7.texSombraBoca, -sw / 2, -sh / 2, sw, sh);
+            ctx.restore();
+
+        } else if (motorGraficoN7.bufferEstatica) {
+            const buf = motorGraficoN7.bufferEstatica;
+            const bctx = buf.getContext('2d');
+            const img = bctx.createImageData(buf.width, buf.height);
+            const data = img.data;
+            const bw = buf.width, bh = buf.height;
+            const semilla = ahora * 0.07;
+
+            for (let y = 0; y < bh; y++) {
+                const ny = (y - bh * 0.5) / (bh * 0.43);
+                const desgarro = Math.sin(y * 0.22 + semilla) * 9 + ((y % 11 === 0) ? (Math.random() - 0.5) * 18 : 0);
+                for (let x = 0; x < bw; x++) {
+                    const idx = (y * bw + x) * 4;
+                    const nx = (x - bw * 0.5 - desgarro) / (bw * 0.42);
+                    const distRostro = nx * nx + ny * ny;
+                    let lum = 4;
+                    if (distRostro < 1.0) {
+                        const ojoIzq = Math.pow((nx + 0.30) * 1.35, 2) + Math.pow((ny + 0.16) * 1.65, 2);
+                        const ojoDer = Math.pow((nx - 0.31) * 1.28, 2) + Math.pow((ny + 0.14) * 1.58, 2);
+                        const nariz = Math.pow(nx * 2.4, 2) + Math.pow((ny - 0.10) * 2.1, 2);
+                        const boca = Math.pow((nx - 0.03) * 0.92, 2) + Math.pow((ny - 0.46) * 1.85, 2);
+                        if (ojoIzq < 0.065 || ojoDer < 0.072 || nariz < 0.025 || boca < 0.11) {
+                            lum = (ojoIzq < 0.004 || ojoDer < 0.004) ? 255 : 2;
+                        } else {
+                            const ruido = hash2D_N7(x + semilla * 13, y - semilla * 7);
+                            const borde = 1 - Math.pow(distRostro, 2.2);
+                            lum = ruido > 0.28 ? (140 + ruido * 115) * borde : 8;
+                        }
+                    }
+                    data[idx] = data[idx + 1] = data[idx + 2] = lum;
+                    data[idx + 3] = 255;
+                }
+            }
+            bctx.putImageData(img, 0, 0);
+            ctx.drawImage(buf, -sw / 2, -sh / 2, sw, sh);
+        }
+
+        if (enGlitch || Math.random() < 0.22) {
+            const franjaY = (Math.random() - 0.5) * sh * 0.85;
+            const franjaH = 8 + Math.random() * 16;
+            const despl = (Math.random() - 0.5) * 28;
+            ctx.save();
+            ctx.globalCompositeOperation = 'screen';
+            ctx.fillStyle = 'rgba(255, 30, 60, 0.34)';
+            ctx.fillRect(-sw / 2 + despl, franjaY, sw, franjaH);
+            ctx.fillStyle = 'rgba(30, 240, 255, 0.34)';
+            ctx.fillRect(-sw / 2 - despl, franjaY + 2, sw, franjaH);
+            ctx.restore();
+        }
+
+        if (motorGraficoN7.texVidrioCRT) {
+            ctx.drawImage(motorGraficoN7.texVidrioCRT, -sw / 2, -sh / 2, sw, sh);
+        }
+    }
+
+    // ============================================================
+    // DIBUJO DEL JEFE EN FASE 1 (15,000 -> 7,001 HP): 100% BLANCO, NEGRO Y GRIS
+    // ============================================================
+    function dibujarJefeFase1N7(tv, ahora) {
+        const golpeado = ahora < tv.flashHasta;
+        const enGlitch = ahora < tv.glitchHasta;
+
+        const temblorX = (Math.random() - 0.5) * 5 + Math.sin(ahora / 34) * 3;
+        const temblorY = (Math.random() - 0.5) * 4 + Math.cos(ahora / 38) * 2.5;
+        const rotLoca = Math.sin(ahora / 65) * 0.024;
+
+        const sw = tv.anchoPantalla;
+        const sh = tv.altoPantalla;
+
+        ctx.save();
+        ctx.translate(tv.x + temblorX, tv.y + temblorY);
+        ctx.rotate(rotLoca);
+
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.92)';
+        ctx.shadowBlur = 40;
+        ctx.shadowOffsetY = 20;
+
+        [-1, 1].forEach(lado => {
+            ctx.strokeStyle = '#18181b';
+            ctx.lineWidth = 30;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(lado * sw * 0.25, -sh * 0.35);
+            ctx.bezierCurveTo(lado * sw * 0.45, -sh * 0.95, lado * sw * 0.95, -sh * 0.75, lado * sw * 0.72, sh * 0.35);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#52525b';
+            ctx.lineWidth = 18;
+            ctx.stroke();
+
+            ctx.strokeStyle = '#a1a1aa';
+            ctx.lineWidth = 5;
+            ctx.stroke();
+        });
+
+        [-1, 1].forEach(lado => {
+            const oscCam = Math.sin(ahora / 240 + lado) * 0.12;
+            ctx.save();
+            ctx.strokeStyle = '#3f3f46';
+            ctx.lineWidth = 14;
+            ctx.beginPath();
+            ctx.moveTo(lado * sw * 0.48, -sh * 0.12);
+            ctx.quadraticCurveTo(lado * sw * 0.76, -sh * 0.36, lado * sw * 0.88, -sh * 0.18);
+            ctx.stroke();
+
+            ctx.translate(lado * sw * 0.88, -sh * 0.18);
+            ctx.rotate(lado * 0.35 + oscCam);
+
+            const camGrad = ctx.createLinearGradient(0, -15, 0, 15);
+            camGrad.addColorStop(0, '#71717a');
+            camGrad.addColorStop(0.5, '#3f3f46');
+            camGrad.addColorStop(1, '#18181b');
+            ctx.fillStyle = camGrad;
+            ctx.strokeStyle = '#09090b';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.roundRect(-24, -15, 48, 30, 5);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#09090b';
+            ctx.beginPath();
+            ctx.arc(lado * 22, 0, 11, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#f4f4f5';
+            ctx.beginPath();
+            ctx.arc(lado * 22, 0, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        [-1, 1].forEach(lado => {
+            ctx.save();
+            ctx.translate(lado * sw * 0.68, sh * 0.18);
+            ctx.rotate(lado * 0.24);
+            ctx.fillStyle = '#27272a';
+            ctx.strokeStyle = '#09090b';
+            ctx.lineWidth = 3.5;
+            ctx.beginPath();
+            ctx.roundRect(-28, -22, 56, 44, 6);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#09090b';
+            ctx.beginPath();
+            ctx.arc(0, 0, 14, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#e4e4e7';
+            ctx.beginPath();
+            ctx.arc(0, 0, 5.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        ctx.strokeStyle = '#3f3f46';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(-36, -sh * 0.54);
+        ctx.lineTo(-56, -sh * 0.72);
+        ctx.lineTo(-42, -sh * 0.74);
+        ctx.lineTo(-68, -sh * 0.90);
+        ctx.moveTo(36, -sh * 0.54);
+        ctx.lineTo(56, -sh * 0.72);
+        ctx.lineTo(42, -sh * 0.74);
+        ctx.lineTo(68, -sh * 0.90);
+        ctx.stroke();
+        ctx.fillStyle = '#a1a1aa';
+        ctx.beginPath();
+        ctx.arc(-68, -sh * 0.90, 5, 0, Math.PI * 2);
+        ctx.arc(68, -sh * 0.90, 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#09090b';
+        ctx.beginPath();
+        ctx.ellipse(0, -sh * 0.56, 56, 12, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(0, -sh * 0.58, 34, Math.PI, 0);
+        ctx.fill();
+
+        const cajaW = sw + 86;
+        const cajaH = sh + 48;
+        const cajaGrad = ctx.createLinearGradient(-cajaW / 2, -cajaH / 2, cajaW / 2, cajaH / 2);
+        cajaGrad.addColorStop(0, golpeado ? '#ffffff' : '#d4d4d8');
+        cajaGrad.addColorStop(0.5, golpeado ? '#ffffff' : '#71717a');
+        cajaGrad.addColorStop(1, golpeado ? '#ffffff' : '#27272a');
+        ctx.fillStyle = cajaGrad;
+        ctx.strokeStyle = '#09090b';
+        ctx.lineWidth = 4.5;
+        ctx.beginPath();
+        ctx.roundRect(-cajaW / 2, -cajaH / 2, cajaW, cajaH, 16);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        [
+            [-cajaW * 0.46, -cajaH * 0.44],
+            [cajaW * 0.46, -cajaH * 0.44],
+            [-cajaW * 0.46, cajaH * 0.44],
+            [cajaW * 0.46, cajaH * 0.44]
+        ].forEach(([rx, ry]) => {
+            ctx.fillStyle = '#18181b';
+            ctx.beginPath();
+            ctx.arc(rx, ry, 4, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        const panelX = sw / 2 + 22;
+        [-sh * 0.24, 0].forEach((ky, idx) => {
+            const kGrad = ctx.createRadialGradient(panelX - 4, ky - 4, 2, panelX, ky, 15);
+            kGrad.addColorStop(0, '#e4e4e7');
+            kGrad.addColorStop(0.6, '#52525b');
+            kGrad.addColorStop(1, '#18181b');
+            ctx.fillStyle = kGrad;
+            ctx.strokeStyle = '#09090b';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.arc(panelX, ky, 15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            const angK = (ahora / 200) * (idx === 0 ? 1 : -1);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(panelX - Math.cos(angK) * 11, ky - Math.sin(angK) * 11);
+            ctx.lineTo(panelX + Math.cos(angK) * 11, ky + Math.sin(angK) * 11);
+            ctx.stroke();
+        });
+
+        ctx.fillStyle = '#3f3f46';
+        ctx.fillRect(panelX - 16, sh * 0.20, 32, 34);
+        ctx.strokeStyle = '#09090b';
+        ctx.lineWidth = 1.6;
+        for (let r = 0; r < 5; r++) {
+            ctx.beginPath();
+            ctx.moveTo(panelX - 12, sh * 0.22 + r * 6);
+            ctx.lineTo(panelX + 12, sh * 0.22 + r * 6);
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = '#09090b';
+        ctx.font = 'italic bold 16px Georgia, serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('puzzlevision', -18, cajaH / 2 - 7);
+
+        ctx.fillStyle = '#050507';
+        ctx.beginPath();
+        ctx.roundRect(-sw / 2 - 22, -sh / 2 - 6, sw + 12, sh + 12, 18);
+        ctx.fill();
+
+        ctx.save();
+        ctx.translate(-16, 0);
+        ctx.beginPath();
+        ctx.roundRect(-sw / 2, -sh / 2, sw, sh, 15);
+        ctx.clip();
+
+        dibujarCaraFase1N7(tv.caraFase1, sw, sh, ahora, enGlitch);
+
+        const glassGrad = ctx.createLinearGradient(-sw / 2, -sh / 2, sw * 0.35, sh * 0.35);
+        glassGrad.addColorStop(0, 'rgba(255, 255, 255, 0.20)');
+        glassGrad.addColorStop(0.42, 'rgba(255, 255, 255, 0.03)');
+        glassGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = glassGrad;
+        ctx.fillRect(-sw / 2, -sh / 2, sw, sh);
+        ctx.restore();
+
+        if (tv.caraFase1 === 2) {
+            ctx.fillStyle = '#d4d4d8';
+            ctx.beginPath();
+            ctx.roundRect(-sw * 0.26, sh / 2 - 4, 16, 26, 8);
+            ctx.fill();
+            ctx.fillStyle = '#71717a';
+            ctx.beginPath();
+            ctx.roundRect(-sw * 0.04, sh / 2 - 4, 22, 42, 11);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+
+    // ============================================================
+    // DIBUJO DEL JEFE EN FASE 2 (<= 7,000 HP — ENOJADO): RADIATION KING
+    // ============================================================
+    function dibujarJefeFase2N7(tv, ahora) {
+        const golpeado = ahora < tv.flashHasta;
+        const enGlitch = ahora < tv.glitchHasta;
+
+        const factorLocura = 1.8 + (1 - tv.vida / 7000) * 2.4;
+        const temblorX = (Math.random() - 0.5) * 10 * factorLocura + Math.sin(ahora / 25) * 4.5;
+        const temblorY = (Math.random() - 0.5) * 8 * factorLocura + Math.cos(ahora / 30) * 3.5;
+        const rotacionLoca = Math.sin(ahora / 46) * 0.040 * factorLocura;
+
+        const sw = tv.anchoPantalla;
+        const sh = tv.altoPantalla;
+
+        ctx.save();
+        ctx.translate(tv.x + temblorX, tv.y + temblorY);
+        ctx.rotate(rotacionLoca);
+
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+        ctx.shadowBlur = 45;
+        ctx.shadowOffsetY = 22;
+
+        [-1, 1].forEach(lado => {
+            ctx.strokeStyle = '#18181b';
+            ctx.lineWidth = 42;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(lado * sw * 0.35, -sh * 0.10);
+            ctx.bezierCurveTo(lado * sw * 0.88, -sh * 0.56, lado * sw * 1.08, sh * 0.12, lado * sw * 0.65, sh * 0.46);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#3f3f46';
+            ctx.lineWidth = 30;
+            ctx.stroke();
+
+            ctx.strokeStyle = '#71717a';
+            ctx.lineWidth = 12;
+            ctx.stroke();
+
+            for (let t = 0.14; t <= 0.88; t += 0.10) {
+                const ax = lado * sw * (0.35 + t * 0.56);
+                const ay = -sh * 0.10 + Math.sin(t * Math.PI) * (-sh * 0.25) + t * sh * 0.40;
+                ctx.strokeStyle = '#18181b';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.arc(ax, ay, 19, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.strokeStyle = '#a1a1aa';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(ax, ay, 17, -0.8, 1.2);
+                ctx.stroke();
+            }
+        });
+
+        const baseW = sw * 1.15;
+        const baseH = sh * 0.43;
+        const baseY = sh * 0.56;
+        ctx.fillStyle = '#18181b';
+        ctx.fillRect(-30, sh * 0.45, 60, 28);
+
+        const baseGrad = ctx.createLinearGradient(0, baseY, 0, baseY + baseH);
+        baseGrad.addColorStop(0, golpeado ? '#ffffff' : '#52525b');
+        baseGrad.addColorStop(0.5, golpeado ? '#ffffff' : '#3f3f46');
+        baseGrad.addColorStop(1, golpeado ? '#ffffff' : '#09090b');
+        ctx.fillStyle = baseGrad;
+        ctx.strokeStyle = '#78350f';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.roundRect(-baseW / 2, baseY, baseW, baseH, 8);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.fillStyle = '#3b1504';
+        ctx.fillRect(-baseW / 2 + 9, baseY + 9, baseW * 0.22, baseH - 18);
+        [baseY + baseH * 0.34, baseY + baseH * 0.70].forEach((ky, idx) => {
+            const kx = -baseW / 2 + 9 + baseW * 0.11;
+            const kGrad = ctx.createRadialGradient(kx - 4, ky - 4, 2, kx, ky, 15);
+            kGrad.addColorStop(0, '#d97706');
+            kGrad.addColorStop(0.6, '#78350f');
+            kGrad.addColorStop(1, '#1c0a00');
+            ctx.fillStyle = kGrad;
+            ctx.beginPath();
+            ctx.arc(kx, ky, 14, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            const angK = (ahora / 140) * (idx === 0 ? 1 : -1);
+            ctx.strokeStyle = '#fef3c7';
+            ctx.lineWidth = 2.4;
+            ctx.beginPath();
+            ctx.moveTo(kx, ky);
+            ctx.lineTo(kx + Math.cos(angK) * 10, ky + Math.sin(angK) * 10);
+            ctx.stroke();
+        });
+
+        const grillX = -baseW / 2 + baseW * 0.26;
+        const grillW = baseW * 0.70;
+        ctx.fillStyle = '#09090b';
+        ctx.fillRect(grillX, baseY + 10, grillW, baseH - 20);
+        for (let gy = baseY + 15; gy < baseY + baseH - 11; gy += 5) {
+            ctx.fillStyle = '#3f3f46';
+            ctx.fillRect(grillX + 4, gy, grillW - 8, 2);
+        }
+        ctx.fillStyle = '#e4e4e7';
+        ctx.font = 'italic bold 15px Georgia, serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Radiation King', grillX + grillW / 2, baseY + 30);
+
+        ctx.strokeStyle = '#18181b';
+        ctx.lineWidth = 12;
+        ctx.beginPath();
+        ctx.moveTo(-sw * 0.56, 0);
+        ctx.quadraticCurveTo(-sw * 0.55, -sh * 0.68, 0, -sh * 0.68);
+        ctx.quadraticCurveTo(sw * 0.55, -sh * 0.68, sw * 0.56, 0);
+        ctx.stroke();
+        ctx.strokeStyle = '#52525b';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+
+        const marcoW = sw + 40;
+        const marcoH = sh + 36;
+        const marcoGrad = ctx.createLinearGradient(-marcoW / 2, -marcoH / 2, marcoW / 2, marcoH / 2);
+        marcoGrad.addColorStop(0, golpeado ? '#ffffff' : '#2dd4bf');
+        marcoGrad.addColorStop(0.5, golpeado ? '#ffffff' : '#0f766e');
+        marcoGrad.addColorStop(1, golpeado ? '#ffffff' : '#451a03');
+        ctx.fillStyle = marcoGrad;
+        ctx.strokeStyle = '#78350f';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.roundRect(-marcoW / 2, -marcoH / 2, marcoW, marcoH, 36);
+        ctx.fill();
+        ctx.stroke();
+
+        [
+            [-marcoW * 0.44, -marcoH * 0.42],
+            [marcoW * 0.44, -marcoH * 0.42],
+            [-marcoW * 0.44, marcoH * 0.42],
+            [marcoW * 0.44, marcoH * 0.42]
+        ].forEach(([rx, ry]) => {
+            const oxGrad = ctx.createRadialGradient(rx, ry, 2, rx, ry, 26);
+            oxGrad.addColorStop(0, 'rgba(120, 53, 15, 0.85)');
+            oxGrad.addColorStop(1, 'rgba(120, 53, 15, 0)');
+            ctx.fillStyle = oxGrad;
+            ctx.beginPath();
+            ctx.arc(rx, ry, 26, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        ctx.fillStyle = '#05070c';
+        ctx.beginPath();
+        ctx.roundRect(-sw / 2 - 8, -sh / 2 - 8, sw + 16, sh + 16, 26);
+        ctx.fill();
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(-sw / 2, -sh / 2, sw, sh, 22);
+        ctx.clip();
+        dibujarCaraFase2N7(tv.caraFase2, sw, sh, ahora, enGlitch);
+
+        const glassGrad = ctx.createLinearGradient(-sw / 2, -sh / 2, sw * 0.35, sh * 0.35);
+        glassGrad.addColorStop(0, 'rgba(255, 255, 255, 0.18)');
+        glassGrad.addColorStop(0.42, 'rgba(255, 255, 255, 0.03)');
+        glassGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = glassGrad;
+        ctx.fillRect(-sw / 2, -sh / 2, sw, sh);
+        ctx.restore();
+        ctx.restore();
+    }
+
+    // ============================================================
+    // RENDER Y COLISIONES DE LOS ATAQUES Y CORAZONES DEL NIVEL 7
+    // ============================================================
+    function actualizarYDibujarAtaquesJefeN7(w, h, jugCx, jugCy, ahora) {
+        const radioJugador = jugador.tam * 0.36;
+
+        // 0. CORAZONES CURATIVOS CADA 18 SEGUNDOS
+        if (ahora >= proximoCorazonN7 && jugador.vidas > 0 && jefeTV_N7 && !jefeTV_N7.muerto) {
+            proximoCorazonN7 = ahora + 18000;
+            corazonesCurativosN7.push({
+                x: 110 + Math.random() * (w - 220),
+                y: h * 0.56 + Math.random() * (h * 0.32),
+                creadoEn: ahora,
+                expiraEn: ahora + 9000
+            });
+            floatingTextsN7.push({
+                x: w / 2,
+                y: h * 0.52,
+                texto: '¡CORAZÓN DE ENERGÍA APARECIÓ!',
+                color: '#4ade80',
+                vida: 65
+            });
+        }
+
+        corazonesCurativosN7 = corazonesCurativosN7.filter(c => {
+            if (ahora >= c.expiraEn) return false;
+            const pulso = 1 + Math.sin(ahora / 140) * 0.14;
+            const restante = Math.ceil((c.expiraEn - ahora) / 1000);
+
+            ctx.save();
+            ctx.translate(c.x, c.y);
+            ctx.scale(pulso, pulso);
+            ctx.shadowColor = '#22c55e';
+            ctx.shadowBlur = 18;
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.moveTo(0, 8);
+            ctx.bezierCurveTo(-14, -4, -18, -16, -7, -18);
+            ctx.bezierCurveTo(-1, -19, 0, -13, 0, -11);
+            ctx.bezierCurveTo(0, -13, 1, -19, 7, -18);
+            ctx.bezierCurveTo(18, -16, 14, -4, 0, 8);
+            ctx.fill();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 10px "Courier New", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${restante}s`, 0, 22);
+            ctx.restore();
+
+            if (puedeMoverse && jugador.vidas > 0 && Math.hypot(jugCx - c.x, jugCy - c.y) <= 28 + radioJugador) {
+                if (jugador.vidas < jugador.vidasMax) {
+                    jugador.vidas++;
+                    if (typeof actualizarCorazonesUI === 'function') actualizarCorazonesUI();
+                }
+                floatingTextsN7.push({
+                    x: c.x,
+                    y: c.y - 18,
+                    texto: '+1 ❤️ RECUPERADO',
+                    color: '#4ade80',
+                    vida: 55
+                });
+                return false;
+            }
+            return true;
+        });
+
+        // 1. LÁSERES Y RAYOS CRT (FIJOS Y GIRATORIOS)
+        laseresJefeN7 = laseresJefeN7.filter(l => {
+            if (ahora >= l.finHasta) return false;
+            const activo = ahora >= l.avisoHasta;
+
+            if (l.giratorio && activo) {
+                l.angActual += l.velGiro;
+                l.x2 = l.origenX + Math.cos(l.angActual) * 1450;
+                l.y2 = l.origenY + Math.sin(l.angActual) * 1450;
+            }
+
+            ctx.save();
+            ctx.lineCap = 'round';
+            if (!activo) {
+                ctx.strokeStyle = l.fase === 1 ? 'rgba(255, 255, 255, 0.45)' : 'rgba(239, 68, 68, 0.55)';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([12, 10]);
+                ctx.beginPath();
+                ctx.moveTo(l.x1, l.y1);
+                ctx.lineTo(l.x2, l.y2);
+                ctx.stroke();
+            } else {
+                ctx.shadowColor = l.color;
+                ctx.shadowBlur = 24;
+                ctx.strokeStyle = l.color;
+                ctx.lineWidth = l.ancho;
+                ctx.beginPath();
+                ctx.moveTo(l.x1, l.y1);
+                ctx.lineTo(l.x2, l.y2);
+                ctx.stroke();
+
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = l.ancho * 0.42;
+                ctx.stroke();
+
+                if (puedeMoverse && jugador.vidas > 0) {
+                    const dx = l.x2 - l.x1;
+                    const dy = l.y2 - l.y1;
+                    const len2 = dx * dx + dy * dy;
+                    let t = ((jugCx - l.x1) * dx + (jugCy - l.y1) * dy) / len2;
+                    t = Math.max(0, Math.min(1, t));
+                    const proxX = l.x1 + t * dx;
+                    const proxY = l.y1 + t * dy;
+                    if (Math.hypot(jugCx - proxX, jugCy - proxY) <= l.ancho * 0.45 + radioJugador) {
+                        daniarJugadorN7(ahora, jugCx, jugCy);
+                    }
+                }
+            }
+            ctx.restore();
+            return true;
+        });
+
+        // 2. MORDIDA ABISAL (MANDÍBULAS GIGANTES QUE SE CIERRAN)
+        mandibulasJefeN7 = mandibulasJefeN7.filter(m => {
+            m.progreso += m.vel;
+            if (m.progreso >= 1.35) return false;
+
+            const cierre = Math.sin(Math.min(1, m.progreso) * (Math.PI / 2));
+            ctx.save();
+            ctx.fillStyle = '#7f1d1d';
+            ctx.strokeStyle = '#fecaca';
+            ctx.lineWidth = 3;
+
+            if (m.horizontal) {
+                const limSup = (m.pasillo - m.anchoPasillo / 2) * cierre;
+                const limInf = h - (h - (m.pasillo + m.anchoPasillo / 2)) * cierre;
+                ctx.fillRect(0, 0, w, limSup);
+                ctx.fillRect(0, limInf, w, h - limInf);
+
+                if (m.progreso >= 0.72 && m.progreso <= 1.15 && puedeMoverse && jugador.vidas > 0) {
+                    if (jugCy - radioJugador < limSup || jugCy + radioJugador > limInf) {
+                        daniarJugadorN7(ahora, jugCx, jugCy);
+                    }
+                }
+            } else {
+                const limIzq = (m.pasillo - m.anchoPasillo / 2) * cierre;
+                const limDer = w - (w - (m.pasillo + m.anchoPasillo / 2)) * cierre;
+                ctx.fillRect(0, 0, limIzq, h);
+                ctx.fillRect(limDer, 0, w - limDer, h);
+
+                if (m.progreso >= 0.72 && m.progreso <= 1.15 && puedeMoverse && jugador.vidas > 0) {
+                    if (jugCx - radioJugador < limIzq || jugCx + radioJugador > limDer) {
+                        daniarJugadorN7(ahora, jugCx, jugCy);
+                    }
+                }
+            }
+            ctx.restore();
+            return true;
+        });
+
+        // 3. DRONES DE ESTÁTICA PERSEGUIDORES (DESTRUCTIBLES)
+        dronesJefeN7 = dronesJefeN7.filter(d => {
+            if (ahora >= d.expiraEn || d.vida <= 0) return false;
+
+            const ang = Math.atan2(jugCy - d.y, jugCx - d.x);
+            d.x += Math.cos(ang) * d.vel;
+            d.y += Math.sin(ang) * d.vel;
+
+            ctx.save();
+            ctx.translate(d.x, d.y);
+            ctx.rotate(ahora / 110);
+            ctx.fillStyle = d.furia ? '#ef4444' : '#e4e4e7';
+            ctx.strokeStyle = '#09090b';
+            ctx.lineWidth = 2.5;
+            ctx.fillRect(-d.tam / 2, -d.tam / 2, d.tam, d.tam);
+            ctx.strokeRect(-d.tam / 2, -d.tam / 2, d.tam, d.tam);
+            ctx.restore();
+
+            if (puedeMoverse && jugador.vidas > 0 && Math.hypot(jugCx - d.x, jugCy - d.y) <= d.tam * 0.6 + radioJugador) {
+                daniarJugadorN7(ahora, jugCx, jugCy);
+                return false;
+            }
+            return true;
+        });
+
+        // 4. ONDAS EXPANSIVAS CON HUECO DE ESQUIVE
+        ondasJefeN7 = ondasJefeN7.filter(o => {
+            o.radio += o.velRadio;
+            if (o.radio >= o.maxRadio) return false;
+
+            const inicioArco = o.huecoAng + o.anchoHueco * 0.5;
+            const finArco = o.huecoAng + Math.PI * 2 - o.anchoHueco * 0.5;
+
+            ctx.save();
+            ctx.shadowColor = o.color;
+            ctx.shadowBlur = 14;
+            ctx.strokeStyle = o.color;
+            ctx.lineWidth = o.grosor;
+            ctx.beginPath();
+            ctx.arc(o.x, o.y, o.radio, inicioArco, finArco);
+            ctx.stroke();
+            ctx.restore();
+
+            if (puedeMoverse && jugador.vidas > 0) {
+                const dist = Math.hypot(jugCx - o.x, jugCy - o.y);
+                if (Math.abs(dist - o.radio) <= o.grosor * 0.5 + radioJugador * 0.8) {
+                    const angJ = Math.atan2(jugCy - o.y, jugCx - o.x);
+                    let diff = Math.atan2(Math.sin(angJ - o.huecoAng), Math.cos(angJ - o.huecoAng));
+                    if (Math.abs(diff) > o.anchoHueco * 0.45) {
+                        daniarJugadorN7(ahora, jugCx, jugCy);
+                    }
+                }
+            }
+            return true;
+        });
+
+        // 5. PROYECTILES (ORBES, BARRAS DE SEÑAL, COLMILLOS Y REBOTES)
+        proyectilesJefeN7 = proyectilesJefeN7.filter(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+
+            if (p.rebotes && p.rebotes > 0) {
+                if (p.x <= 20 || p.x >= w - 20) {
+                    p.vx *= -1;
+                    p.rebotes--;
+                }
+                if (p.y >= h - 20) {
+                    p.vy *= -1;
+                    p.rebotes--;
+                }
+            }
+
+            let impacto = false;
+            if (puedeMoverse && jugador.vidas > 0) {
+                if (p.tipo === 'barra_tv_bn') {
+                    if (Math.abs(jugCx - p.x) <= p.ancho * 0.5 + radioJugador * 0.75 &&
+                        Math.abs(jugCy - p.y) <= p.alto * 0.5 + radioJugador * 0.75) {
+                        impacto = true;
+                    }
+                } else {
+                    if (Math.hypot(jugCx - p.x, jugCy - p.y) <= (p.radio || 8) + radioJugador * 0.8) {
+                        impacto = true;
+                    }
+                }
+            }
+
+            if (impacto) {
+                daniarJugadorN7(ahora, jugCx, jugCy);
+                return false;
+            }
+
+            ctx.save();
+            if (p.tipo === 'barra_tv_bn') {
+                ctx.fillStyle = p.color;
+                ctx.strokeStyle = '#09090b';
+                ctx.lineWidth = 2;
+                ctx.fillRect(p.x - p.ancho / 2, p.y - p.alto / 2, p.ancho, p.alto);
+                ctx.strokeRect(p.x - p.ancho / 2, p.y - p.alto / 2, p.ancho, p.alto);
+            } else if (p.tipo === 'colmillo_terror') {
+                ctx.translate(p.x, p.y);
+                ctx.rotate(Math.atan2(p.vy, p.vx));
+                ctx.fillStyle = '#fecaca';
+                ctx.strokeStyle = '#7f1d1d';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(14, 0);
+                ctx.lineTo(-10, -8);
+                ctx.lineTo(-6, 0);
+                ctx.lineTo(-10, 8);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            } else {
+                ctx.shadowColor = p.color;
+                ctx.shadowBlur = 12;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radio, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radio * 0.42, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+
+            return p.x > -70 && p.x < w + 70 && p.y > -70 && p.y < h + 70;
+        });
+
+        // 6. TEXTOS FLOTANTES
+        floatingTextsN7 = floatingTextsN7.filter(ft => {
+            ft.y -= 0.9;
+            ft.vida--;
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, ft.vida / 45);
+            ctx.font = 'bold 14px "Courier New", monospace';
+            ctx.fillStyle = ft.color;
+            ctx.textAlign = 'center';
+            ctx.fillText(ft.texto, ft.x, ft.y);
+            ctx.restore();
+            return ft.vida > 0;
+        });
+    }
+
+    // ============================================================
+    // BUCLE PRINCIPAL DEL NIVEL 7
+    // ============================================================
+    function bucleNivel7() {
+        if (!juegoActivo || nivelActual !== 7) {
+            detenerMusicaNivel7();
+            return;
+        }
+        const ahora = Date.now();
+        const w = canvas.width;
+        const h = canvas.height;
+
+        // Transición automática a Fase 2 (MODO ENOJADO) al llegar a 7,000 HP o menos + cambio de música
+        if (jefeTV_N7 && !jefeTV_N7.muerto && jefeTV_N7.vida <= 7000 && jefeTV_N7.fase === 1) {
+            jefeTV_N7.fase = 2;
+            jefeTV_N7.caraFase2 = 1;
+            jefeTV_N7.glitchHasta = ahora + 560;
+            jefeTV_N7.proximoCambioCara = ahora + 800;
+            jefeTV_N7.proximoAtaque = ahora + 950;
+            proyectilesJefeN7 = [];
+            laseresJefeN7 = [];
+            ondasJefeN7 = [];
+            dronesJefeN7 = [];
+            mandibulasJefeN7 = [];
+
+            // Cambiar a la canción de furia: /static/audio/Jagged_Steel_Teeth.mp3
+            iniciarMusicaNivel7(2);
+
+            document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 7 — FASE 2: ¡FURIA OMEGA CRT DESATADA!';
+        }
+
+        const faseActual = jefeTV_N7 ? jefeTV_N7.fase : 1;
+        dibujarEscenarioNivel7(w, h, ahora, faseActual);
+
+        const margen = 48;
+        if (puedeMoverse && jugador.vidas > 0) {
+            let mx = 0, my = 0;
+            if (teclas.ArrowLeft || teclasExtraP2.KeyA) mx -= 1;
+            if (teclas.ArrowRight || teclasExtraP2.KeyD) mx += 1;
+            if (teclas.ArrowUp || teclasExtraP2.KeyW) my -= 1;
+            if (teclas.ArrowDown || teclasExtraP2.KeyS) my += 1;
+
+            if (mx !== 0 || my !== 0) {
+                const norm = Math.hypot(mx, my);
+                playerN7.x += (mx / norm) * playerN7.vel;
+                playerN7.y += (my / norm) * playerN7.vel;
+            }
+            playerN7.x = Math.max(margen, Math.min(w - margen - jugador.tam, playerN7.x));
+            playerN7.y = Math.max(margen, Math.min(h - margen - jugador.tam, playerN7.y));
+        }
+
+        const jugCx = playerN7.x + jugador.tam / 2;
+        const jugCy = playerN7.y + jugador.tam / 2;
+
+        if (jefeTV_N7 && !jefeTV_N7.muerto) {
+            jefeTV_N7.x = w / 2;
+            jefeTV_N7.y = h * 0.30;
+
+            if (ahora >= jefeTV_N7.proximoCambioCara) {
+                if (jefeTV_N7.fase === 1) {
+                    let nueva = Math.floor(Math.random() * 3);
+                    if (nueva === jefeTV_N7.caraFase1) nueva = (nueva + 1) % 3;
+                    jefeTV_N7.caraFase1 = nueva;
+                    jefeTV_N7.glitchHasta = ahora + 160;
+                    jefeTV_N7.proximoCambioCara = ahora + 950 + Math.random() * 1100;
+                } else {
+                    let nueva = Math.floor(Math.random() * 4);
+                    if (nueva === jefeTV_N7.caraFase2) nueva = (nueva + 1) % 4;
+                    jefeTV_N7.caraFase2 = nueva;
+                    jefeTV_N7.glitchHasta = ahora + 210;
+                    jefeTV_N7.proximoCambioCara = ahora + 500 + Math.random() * 750;
+                }
+            }
+
+            if (puedeMoverse && jugador.vidas > 0 && ahora >= jefeTV_N7.proximoAtaque) {
+                ejecutarAtaqueJefeN7(jefeTV_N7, jugCx, jugCy, w, h, ahora, false);
+            }
+
+            if (jefeTV_N7.fase === 1) {
+                dibujarJefeFase1N7(jefeTV_N7, ahora);
+            } else {
+                dibujarJefeFase2N7(jefeTV_N7, ahora);
+            }
+
+            // Barra superior de vida del Jefe Final (15,000 HP)
+            const barW = Math.min(600, w * 0.66);
+            const barX = (w - barW) / 2;
+            ctx.fillStyle = 'rgba(10, 5, 18, 0.92)';
+            ctx.fillRect(barX, 46, barW, 20);
+            ctx.fillStyle = jefeTV_N7.fase === 1 ? '#d4d4d8' : '#ef4444';
+            ctx.fillRect(barX, 46, barW * (jefeTV_N7.vida / jefeTV_N7.vidaMax), 20);
+            ctx.strokeStyle = jefeTV_N7.fase === 1 ? '#f4f4f5' : '#fca5a5';
+            ctx.lineWidth = 1.6;
+            ctx.strokeRect(barX, 46, barW, 20);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 12px "Courier New", monospace';
+            ctx.textAlign = 'center';
+            const etiquetaFase = jefeTV_N7.fase === 1 ? 'SEÑAL VINTAGE B/N' : 'OMEGA CRT ENOJADO';
+            ctx.fillText(`SEÑOR DE LA SEÑAL (${etiquetaFase}): ${jefeTV_N7.vida} / ${jefeTV_N7.vidaMax}`, w / 2, 60);
+        }
+
+        actualizarYDibujarAtaquesJefeN7(w, h, jugCx, jugCy, ahora);
+
+        if (jefeTV_N7 && !jefeTV_N7.muerto) {
+            estadoMarineP2.anguloTopDown = Math.atan2(jefeTV_N7.y - jugCy, jefeTV_N7.x - jugCx);
+        }
+
+        if (puedeMoverse && jugador.vidas > 0) {
+            if (estadoMarineP2.disparando && !estadoMarineP2.escudoActivo && ahora - estadoMarineP2.ultimoDisparo >= 105) {
+                estadoMarineP2.ultimoDisparo = ahora;
+                const ang = estadoMarineP2.anguloTopDown;
+                estadoMarineP2.balas.push({
+                    x: jugCx + Math.cos(ang) * 28,
+                    y: jugCy + Math.sin(ang) * 28,
+                    vx: Math.cos(ang) * 19,
+                    vy: Math.sin(ang) * 19,
+                    danio: 15
+                });
+            }
+        }
+
+        estadoMarineP2.balas = estadoMarineP2.balas.filter(b => {
+            b.x += b.vx;
+            b.y += b.vy;
+
+            // Impacto contra drones perseguidores del jefe
+            for (let i = 0; i < dronesJefeN7.length; i++) {
+                const dr = dronesJefeN7[i];
+                if (Math.hypot(b.x - dr.x, b.y - dr.y) <= dr.tam) {
+                    dr.vida -= b.danio;
+                    return false;
+                }
+            }
+
+            if (jefeTV_N7 && !jefeTV_N7.muerto) {
+                const halfW = jefeTV_N7.anchoPantalla / 2 + 12;
+                const halfH = jefeTV_N7.altoPantalla / 2 + 12;
+                if (Math.abs(b.x - jefeTV_N7.x) <= halfW && Math.abs(b.y - jefeTV_N7.y) <= halfH) {
+                    jefeTV_N7.vida = Math.max(0, jefeTV_N7.vida - b.danio);
+                    jefeTV_N7.flashHasta = ahora + 55;
+                    if (jefeTV_N7.vida === 0) {
+                        jefeTV_N7.muerto = true;
+                        proyectilesJefeN7 = [];
+                        laseresJefeN7 = [];
+                        ondasJefeN7 = [];
+                        dronesJefeN7 = [];
+                        mandibulasJefeN7 = [];
+                        corazonesCurativosN7 = [];
+                        puedeMoverse = false;
+                        detenerMusicaNivel7();
+                        textoContador = '¡NIVEL 7 COMPLETADO!';
+                        document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 7 — ¡SEÑAL ABISAL DESTRUIDA!';
+                    }
+                    return false;
+                }
+            }
+
+            ctx.fillStyle = '#fbbf24';
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            return b.x > 0 && b.x < w && b.y > 0 && b.y < h;
+        });
+
+        if (typeof dibujarJugadorMarineP2 === 'function') {
+            dibujarJugadorMarineP2(playerN7.x, playerN7.y, ahora, true);
+        }
+
+        if (textoContador !== '') {
+            ctx.font = 'bold 44px "Courier New", monospace';
+            ctx.fillStyle = '#ffd60a';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(textoContador, w / 2, h / 2);
+        }
+
+        animacionIdNivel7 = requestAnimationFrame(bucleNivel7);
+    }
+</script>

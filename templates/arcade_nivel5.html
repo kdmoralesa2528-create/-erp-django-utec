@@ -1,0 +1,3265 @@
+<style id="estilos-parte2">
+    /* Pantalla completa exclusiva para Parte 2 (Niveles 5, 6 y 7) */
+    .pantalla-negra.fullscreen-parte2 {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        border-radius: 0 !important;
+        z-index: 9999 !important;
+        background: #09060c !important;
+    }
+    .pantalla-negra.fullscreen-parte2 #juego-canvas {
+        width: 100vw !important;
+        height: 100vh !important;
+        border: none !important;
+    }
+    .pantalla-negra.fullscreen-parte2 > div:first-child {
+        position: fixed;
+        top: 14px;
+        left: 20px;
+        right: 20px;
+        width: auto !important;
+        z-index: 10000;
+    }
+    .pantalla-negra.fullscreen-parte2 .hud-juego {
+        position: fixed;
+        bottom: 12px;
+        left: 20px;
+        right: 20px;
+        width: auto !important;
+        z-index: 10000;
+        background: rgba(10, 6, 18, 0.90);
+        padding: 8px 18px;
+        border-radius: 10px;
+        border: 1px solid rgba(192, 132, 252, 0.5);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        white-space: nowrap;
+    }
+    .pantalla-negra.fullscreen-parte2 #corazones-jugador {
+        font-size: 1.05rem !important;
+        letter-spacing: 1px !important;
+    }
+
+    /* Contenedor y botones de la Parte 2 */
+    #contenedor-parte2 {
+        display: none;
+        margin-top: 2rem;
+        padding-top: 1.5rem;
+        border-top: 2px dashed #7b2cbf;
+    }
+    .nivel-5 { background: linear-gradient(135deg, #7209b7, #3a0ca3); border: 1.5px solid #c77dff !important; }
+    .nivel-6 { background: linear-gradient(135deg, #b5179e, #560bad); border: 1.5px solid #f72585 !important; }
+    .nivel-7 { background: linear-gradient(135deg, #d00000, #370617); border: 1.5px solid #ffba08 !important; }
+</style>
+
+<script>
+    let animacionIdNivel5 = null;
+
+    // Estado compartido del jugador para toda la Parte 2 (Niveles 5, 6 y 7)
+    const estadoMarineP2 = {
+        escudoActivo: false,
+        escudoGolpesRestantes: 3, // Aguanta 3 ataques del Jefe Final antes de romperse
+        escudoRoto: false,
+        disparando: false,
+        ultimoDisparo: 0,
+        direccion: 1, // 1 = derecha, -1 = izquierda (modo lateral)
+        anguloTopDown: 0, // Ángulo de auto-apuntado en vista aérea (top-down)
+        balas: [],
+        particulas: []
+    };
+
+    // ============================================================
+    // 1. INYECCIÓN DE INTERFAZ DE PARTE 2 EN EL MENÚ SIN TOCAR arcade.html
+    // ============================================================
+    function inicializarUIParte2() {
+        const menuNiveles = document.getElementById('menu-niveles');
+        if (menuNiveles && !document.getElementById('contenedor-parte2')) {
+            const bloqueP2 = document.createElement('div');
+            bloqueP2.id = 'contenedor-parte2';
+            bloqueP2.innerHTML = `
+                <h4 style="color: #e0aaff; letter-spacing: 2px; margin-bottom: 0.4rem;">🌀 ARCADE — PARTE 2 🌀</h4>
+                <p style="color: #9d4edd; font-size: 0.9rem; margin-bottom: 1.2rem;">El Abismo Dimensional ha sido abierto</p>
+                <div class="niveles-grid">
+                    <button class="btn-nivel nivel-5" onclick="abrirNivel(5, false)">🟣 NIVEL 5: PUENTE Y CIUDAD</button>
+                    <button class="btn-nivel nivel-6" onclick="abrirNivel(6, false)">🔮 NIVEL 6</button>
+                    <button class="btn-nivel nivel-7" onclick="abrirNivel(7, false)">🔥 NIVEL 7</button>
+                </div>
+            `;
+            menuNiveles.appendChild(bloqueP2);
+        }
+
+        const trofeosCorner = document.querySelector('.trofeos-corner');
+        if (trofeosCorner && !document.getElementById('copa-ojo-n4')) {
+            const copaOjo = document.createElement('span');
+            copaOjo.id = 'copa-ojo-n4';
+            copaOjo.className = 'copa-slot';
+            copaOjo.title = 'Trofeo: Dios Abisal Fusionado Derrotado';
+            copaOjo.textContent = '👁️';
+            trofeosCorner.insertBefore(copaOjo, document.getElementById('contador-copas'));
+        }
+
+        verificarTrofeoYParte2();
+    }
+
+    function verificarTrofeoYParte2() {
+        const parte2Desbloqueada = localStorage.getItem('parte2_desbloqueada') === 'true';
+        const trofeoOjo = localStorage.getItem('trofeo_ojo_dorado_n4') === 'desbloqueado';
+
+        const contenedorP2 = document.getElementById('contenedor-parte2');
+        if (contenedorP2) {
+            contenedorP2.style.display = parte2Desbloqueada ? 'block' : 'none';
+        }
+
+        const copaOjo = document.getElementById('copa-ojo-n4');
+        if (copaOjo) {
+            if (trofeoOjo) copaOjo.classList.add('ganada');
+            else copaOjo.classList.remove('ganada');
+        }
+    }
+
+    function activarPantallaCompletaParte2() {
+        const pantalla = document.getElementById('pantalla-juego');
+        if (pantalla) pantalla.classList.add('fullscreen-parte2');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(() => {});
+        }
+    }
+
+    function restaurarPantallaParte2() {
+        const pantalla = document.getElementById('pantalla-juego');
+        if (pantalla) pantalla.classList.remove('fullscreen-parte2');
+        canvas.width = 800;
+        canvas.height = 440;
+        if (document.fullscreenElement && document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+        }
+    }
+
+    window.addEventListener('resize', () => {
+        if (juegoActivo && nivelActual >= 5) {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+    });
+
+    // ============================================================
+    // 2. CONTROLES DE PARTE 2
+    // ============================================================
+    const teclasExtraP2 = { KeyW: false, KeyA: false, KeyS: false, KeyD: false };
+
+    window.addEventListener('keydown', e => {
+        if (!juegoActivo || nivelActual < 5) return;
+
+        if (e.code in teclasExtraP2) teclasExtraP2[e.code] = true;
+
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') estadoMarineP2.direccion = -1;
+        if (e.code === 'ArrowRight' || e.code === 'KeyD') estadoMarineP2.direccion = 1;
+
+        if (e.code === 'KeyS' && !e.repeat) {
+            if (nivelActual === 5 && typeof modoArenaTopDownN5 !== 'undefined' && !modoArenaTopDownN5) {
+                e.preventDefault();
+                saltarJugadorNivel5();
+            }
+        }
+
+        if (e.code === 'Space' || e.key === ' ') {
+            e.preventDefault();
+            estadoMarineP2.disparando = true;
+        }
+
+        if (e.code === 'KeyE') {
+            e.preventDefault();
+            if (!estadoMarineP2.escudoRoto && !estadoMarineP2.escudoActivo) {
+                estadoMarineP2.escudoActivo = true;
+                actualizarHudMarineP2();
+            }
+        }
+    }, true);
+
+    window.addEventListener('keyup', e => {
+        if (e.code in teclasExtraP2) teclasExtraP2[e.code] = false;
+        if (e.code === 'Space' || e.key === ' ') {
+            estadoMarineP2.disparando = false;
+        }
+        if (e.code === 'KeyE') {
+            estadoMarineP2.escudoActivo = false;
+            actualizarHudMarineP2();
+        }
+    }, true);
+
+    window.addEventListener('blur', () => {
+        estadoMarineP2.disparando = false;
+        estadoMarineP2.escudoActivo = false;
+        Object.keys(teclasExtraP2).forEach(k => teclasExtraP2[k] = false);
+        actualizarHudMarineP2();
+    });
+
+    function actualizarHudMarineP2() {
+        const hudEnergia = document.getElementById('cargas-energia');
+        const hudDerecha = document.querySelector('.hud-juego span:last-child');
+        const enTopDown = (nivelActual === 5 && typeof modoArenaTopDownN5 !== 'undefined' && modoArenaTopDownN5);
+
+        if (hudDerecha && nivelActual >= 5) {
+            hudDerecha.textContent = enTopDown
+                ? '[← → ↑ ↓ / WASD] MOVER | AUTO-APUNTADO ACTIVO'
+                : '[← →] MOVER | [S] SALTAR';
+            hudDerecha.style.color = '#cbd5e1';
+        }
+        if (!hudEnergia) return;
+
+        if (estadoMarineP2.escudoRoto) {
+            hudEnergia.textContent = '💥 ESCUDO DESTRUIDO | 🔫 [ESPACIO] DISPARAR';
+            hudEnergia.style.color = '#ef4444';
+        } else if (estadoMarineP2.escudoActivo) {
+            hudEnergia.textContent = `🛡️ ESCUDO ACTIVO (${estadoMarineP2.escudoGolpesRestantes}/3 RESISTENCIA JEFE)`;
+            hudEnergia.style.color = '#f87171';
+        } else {
+            hudEnergia.textContent = `🔫 [ESPACIO] DISPARAR | [E] ESCUDO (${estadoMarineP2.escudoGolpesRestantes}/3)`;
+            hudEnergia.style.color = '#38bdf8';
+        }
+    }
+
+    // ============================================================
+    // 3. DISEÑO DEL JUGADOR (LATERAL Y VISTA SUPERIOR TOP-DOWN)
+    // ============================================================
+    function dibujarJugadorMarineP2(screenX, screenY, ahora, modoTopDown = false) {
+        const parpadeo = ahora < jugador.invulnerableHasta && Math.floor(ahora / 90) % 2 === 0;
+        if (parpadeo) return;
+
+        const cx = screenX + jugador.tam / 2;
+        const cy = screenY + jugador.tam / 2;
+        const radio = jugador.tam * 0.54;
+        const escudoActivo = estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto;
+        const disparandoAhora = estadoMarineP2.disparando && !escudoActivo;
+
+        ctx.save();
+        ctx.translate(cx, cy);
+
+        if (modoTopDown) {
+            // Sombra en vista aérea
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+            ctx.beginPath();
+            ctx.arc(3, 4, radio * 0.95, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.rotate(estadoMarineP2.anguloTopDown);
+
+            // Hombreras blindadas vistas desde arriba
+            ctx.fillStyle = '#1e293b';
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.roundRect(-radio * 0.55, -radio * 0.95, radio * 0.95, radio * 0.55, 5);
+            ctx.roundRect(-radio * 0.55, radio * 0.40, radio * 0.95, radio * 0.55, 5);
+            ctx.fill();
+            ctx.stroke();
+
+            // Mochila de energía dorsal
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(-radio * 0.92, -radio * 0.48, radio * 0.45, radio * 0.96);
+
+            // Casco visto desde arriba
+            const cascoGrad = ctx.createRadialGradient(-2, -2, 2, 0, 0, radio * 0.68);
+            cascoGrad.addColorStop(0, '#475569');
+            cascoGrad.addColorStop(1, '#0f172a');
+            ctx.fillStyle = cascoGrad;
+            ctx.beginPath();
+            ctx.arc(radio * 0.08, 0, radio * 0.62, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            // Visor naranja apuntando hacia el objetivo
+            ctx.fillStyle = '#f97316';
+            ctx.beginPath();
+            ctx.moveTo(radio * 0.45, -radio * 0.28);
+            ctx.lineTo(radio * 0.68, -radio * 0.12);
+            ctx.lineTo(radio * 0.68, radio * 0.12);
+            ctx.lineTo(radio * 0.45, radio * 0.28);
+            ctx.closePath();
+            ctx.fill();
+
+            // Rifle Bólter rojo apuntando al objetivo
+            if (!escudoActivo) {
+                ctx.fillStyle = '#b91c1c';
+                ctx.strokeStyle = '#fca5a5';
+                ctx.lineWidth = 1.3;
+                ctx.beginPath();
+                ctx.roundRect(radio * 0.25, radio * 0.15, radio * 1.15, 11, 3);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#facc15';
+                ctx.fillRect(radio * 0.52, radio * 0.22, 12, 4);
+
+                if (disparandoAhora && Math.floor(ahora / 55) % 2 === 0) {
+                    const bocaX = radio * 1.48;
+                    ctx.fillStyle = '#fef08a';
+                    ctx.beginPath();
+                    ctx.arc(bocaX, radio * 0.34, 10, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            // Escudo Carmesí frente al jugador
+            if (escudoActivo) {
+                ctx.strokeStyle = '#ef4444';
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.arc(radio * 0.35, 0, radio * 0.95, -Math.PI * 0.42, Math.PI * 0.42);
+                ctx.stroke();
+
+                ctx.strokeStyle = '#facc15';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(radio * 0.38, 0, radio * 0.98, -Math.PI * 0.38, Math.PI * 0.38);
+                ctx.stroke();
+            }
+
+            ctx.restore();
+            return;
+        }
+
+        // --- MODO LATERAL (PUENTE Y CALLE) ---
+        const dir = estadoMarineP2.direccion;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+        ctx.beginPath();
+        ctx.ellipse(0, radio * 0.92, radio * 0.85, radio * 0.25, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.scale(dir, 1);
+
+        ctx.fillStyle = '#334155';
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(-radio * 0.35, -radio * 0.25, radio * 0.45, radio * 0.48, 4);
+        ctx.fill();
+        ctx.stroke();
+
+        const cascoGrad = ctx.createRadialGradient(-radio * 0.2, -radio * 0.35, radio * 0.1, 0, 0, radio);
+        cascoGrad.addColorStop(0, '#475569');
+        cascoGrad.addColorStop(0.55, '#1e293b');
+        cascoGrad.addColorStop(1, '#090d16');
+
+        ctx.fillStyle = cascoGrad;
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(-radio * 0.82, -radio * 0.05);
+        ctx.bezierCurveTo(-radio * 0.85, -radio * 1.05, radio * 0.85, -radio * 1.05, radio * 0.85, -radio * 0.05);
+        ctx.lineTo(radio * 0.72, radio * 0.65);
+        ctx.lineTo(0, radio * 0.92);
+        ctx.lineTo(-radio * 0.72, radio * 0.65);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#334155';
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.roundRect(-radio * 0.25, -radio * 0.92, radio * 0.55, radio * 0.32, 3);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#f97316';
+        ctx.strokeStyle = '#fef08a';
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.moveTo(radio * 0.18, -radio * 0.12);
+        ctx.lineTo(radio * 0.75, -radio * 0.22);
+        ctx.lineTo(radio * 0.68, radio * 0.02);
+        ctx.lineTo(radio * 0.22, radio * 0.05);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.moveTo(radio * 0.15, radio * 0.12);
+        ctx.lineTo(radio * 0.82, radio * 0.28);
+        ctx.lineTo(radio * 0.68, radio * 0.74);
+        ctx.lineTo(radio * 0.10, radio * 0.78);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-radio * 0.15, radio * 0.35);
+        ctx.quadraticCurveTo(radio * 0.15, radio * 0.62, radio * 0.45, radio * 0.58);
+        ctx.stroke();
+
+        if (!escudoActivo) {
+            ctx.save();
+            ctx.translate(radio * 0.15, radio * 0.42);
+
+            ctx.fillStyle = '#475569';
+            ctx.fillRect(radio * 0.35, radio * 0.22, 9, 14);
+
+            ctx.fillStyle = '#b91c1c';
+            ctx.strokeStyle = '#fca5a5';
+            ctx.lineWidth = 1.3;
+            ctx.beginPath();
+            ctx.roundRect(-4, -8, radio * 1.35, 16, 3);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#334155';
+            ctx.fillRect(radio * 0.15, -14, radio * 0.65, 6);
+
+            ctx.fillStyle = '#facc15';
+            ctx.beginPath();
+            ctx.moveTo(radio * 0.25, 0);
+            ctx.lineTo(radio * 0.65, -4);
+            ctx.lineTo(radio * 1.05, 0);
+            ctx.lineTo(radio * 0.65, 5);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = '#1e293b';
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.fillRect(radio * 1.30, -5, 10, 10);
+            ctx.strokeRect(radio * 1.30, -5, 10, 10);
+
+            if (disparandoAhora && Math.floor(ahora / 55) % 2 === 0) {
+                const bocaX = radio * 1.30 + 14;
+                const fogonazo = ctx.createRadialGradient(bocaX, 0, 1, bocaX, 0, 15);
+                fogonazo.addColorStop(0, '#ffffff');
+                fogonazo.addColorStop(0.5, '#fde047');
+                fogonazo.addColorStop(1, 'rgba(249, 115, 22, 0)');
+                ctx.fillStyle = fogonazo;
+                ctx.beginPath();
+                ctx.arc(bocaX, 0, 15, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        if (escudoActivo) {
+            ctx.save();
+            ctx.translate(radio * 0.78, radio * 0.1);
+
+            ctx.strokeStyle = 'rgba(248, 113, 113, 0.55)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, radio * 1.15, -Math.PI * 0.45, Math.PI * 0.45);
+            ctx.stroke();
+
+            ctx.fillStyle = '#d4af37';
+            ctx.strokeStyle = '#fef08a';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(-8, -radio * 1.05);
+            ctx.lineTo(14, -radio * 0.75);
+            ctx.lineTo(16, radio * 0.65);
+            ctx.lineTo(-4, radio * 1.05);
+            ctx.lineTo(-14, radio * 0.65);
+            ctx.lineTo(-14, -radio * 0.75);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#991b1b';
+            ctx.beginPath();
+            ctx.moveTo(-6, -radio * 0.86);
+            ctx.lineTo(10, -radio * 0.62);
+            ctx.lineTo(12, radio * 0.52);
+            ctx.lineTo(-3, radio * 0.86);
+            ctx.lineTo(-10, radio * 0.52);
+            ctx.lineTo(-10, -radio * 0.62);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.fillStyle = '#facc15';
+            ctx.fillRect(-3, -radio * 0.25, 8, radio * 0.45);
+
+            ctx.restore();
+        }
+
+        ctx.restore();
+    }
+
+    // ============================================================
+    // 4. ENGANCHE CON abrirNivel Y volverAlMenu DE arcade.html
+    // ============================================================
+    const _abrirNivelOriginal = abrirNivel;
+    abrirNivel = function(nivel, extremo = false) {
+        if (nivel >= 5) {
+            nivelActual = nivel;
+            modoExtremo = extremo;
+            document.getElementById('menu-niveles').style.display = 'none';
+            document.getElementById('pantalla-juego').style.display = 'flex';
+            document.getElementById('titulo-nivel-activo').textContent = `PARTE 2 — NIVEL ${nivel}`;
+
+            estadoMarineP2.escudoActivo = false;
+            estadoMarineP2.escudoGolpesRestantes = 3;
+            estadoMarineP2.escudoRoto = false;
+            estadoMarineP2.disparando = false;
+            estadoMarineP2.direccion = 1;
+            estadoMarineP2.anguloTopDown = 0;
+            estadoMarineP2.balas = [];
+            estadoMarineP2.particulas = [];
+            actualizarHudMarineP2();
+
+            juegoActivo = true;
+            cancelAnimationFrame(animacionId);
+
+            if (nivel === 5 && typeof iniciarNivel5 === 'function') iniciarNivel5();
+            else if (nivel === 6 && typeof iniciarNivel6 === 'function') iniciarNivel6();
+            else if (nivel === 7 && typeof iniciarNivel7 === 'function') iniciarNivel7();
+
+            if (nivel !== 5) {
+                iniciarCuentaRegresiva();
+            }
+            return;
+        }
+        _abrirNivelOriginal(nivel, extremo);
+    };
+
+    const _volverAlMenuOriginal = volverAlMenu;
+    volverAlMenu = function() {
+        if (typeof animacionIdNivel5 !== 'undefined') cancelAnimationFrame(animacionIdNivel5);
+        if (typeof animacionIdNivel6 !== 'undefined') cancelAnimationFrame(animacionIdNivel6);
+        if (typeof animacionIdNivel7 !== 'undefined') cancelAnimationFrame(animacionIdNivel7);
+        estadoMarineP2.disparando = false;
+        estadoMarineP2.escudoActivo = false;
+        const hudDerecha = document.querySelector('.hud-juego span:last-child');
+        if (hudDerecha) hudDerecha.textContent = 'Junta 3 esferas + ESPACIO';
+        restaurarPantallaParte2();
+        _volverAlMenuOriginal();
+        verificarTrofeoYParte2();
+    };
+
+    // ============================================================
+    // 5. NIVEL 5: PUENTE -> CIUDAD -> JEFE FINAL EN VISTA AÉREA (TOP-DOWN)
+    // ============================================================
+    const NIVEL5_FIN_PUENTE = 4400;
+    const NIVEL5_LONGITUD = 9000;
+    let camaraX_N5 = 0;
+    let playerN5 = null;
+    let portalInicioN5 = null;
+    let tramosPuenteN5 = [];
+    let cochesDestruidosN5 = [];
+    let enemigosN5 = [];
+    let proyectilesAcidoN5 = [];
+    let charcosAcidoN5 = [];
+    let guardianesEliteN5 = [];
+    let navesFondoN5 = [];
+    let monstruosFondoN5 = [];
+    let soldadosAliadosFondoN5 = [];
+    let edificiosLejanosN5 = [];
+    let edificiosFondoN5 = [];
+    let edificiosPrimerPlanoCiudadN5 = [];
+    let chispasGuerraN5 = [];
+    let ultimoSpawnHordaN5 = 0;
+    let ultimoSpawnEliteN5 = 0;
+    let contadorEnemigosCreadosN5 = 0;
+    let zonaActualTextoN5 = 'PUENTE';
+
+    // Variables de la Batalla Final en Vista Aérea (Centro de la Ciudad)
+    let modoArenaTopDownN5 = false;
+    let jefeFinalN5 = null;
+    let avisosAcidoTopDownN5 = [];
+    let charcosAcidoTopDownN5 = [];
+    let minionsTopDownN5 = [];
+    let ultimoSpawnMinionTopDownN5 = 0;
+    let crateresPlazaN5 = [];
+    let destelloCuracionHastaN5 = 0;
+
+    // Variables de Explosión del Jefe + Cinemática con Soldados Aliados -> Nivel 6
+    let explosionJefeN5 = null;
+    let cinematicaAliadosN5 = null;
+
+    function saltarJugadorNivel5() {
+        if (!playerN5 || !puedeMoverse || playerN5.saliendoPortal || modoArenaTopDownN5) return;
+        if (playerN5.enSuelo) {
+            playerN5.vy = -15.6;
+            playerN5.enSuelo = false;
+        }
+    }
+
+    function iniciarNivel5() {
+        cancelAnimationFrame(animacionIdNivel5);
+        clearInterval(intervaloContador);
+        textoContador = '';
+        activarPantallaCompletaParte2();
+
+        const h = canvas.height;
+        const sueloY = h - 105;
+
+        jugador.tam = 46;
+        jugador.vidasMax = 10;
+        jugador.vidas = 10;
+        jugador.invulnerableHasta = 0;
+        actualizarCorazonesUI();
+
+        estadoMarineP2.escudoActivo = false;
+        estadoMarineP2.escudoGolpesRestantes = 3;
+        estadoMarineP2.escudoRoto = false;
+        actualizarHudMarineP2();
+
+        camaraX_N5 = 0;
+        zonaActualTextoN5 = 'PUENTE';
+        contadorEnemigosCreadosN5 = 0;
+        modoArenaTopDownN5 = false;
+        jefeFinalN5 = null;
+        avisosAcidoTopDownN5 = [];
+        charcosAcidoTopDownN5 = [];
+        minionsTopDownN5 = [];
+        destelloCuracionHastaN5 = 0;
+        explosionJefeN5 = null;
+        cinematicaAliadosN5 = null;
+
+        portalInicioN5 = {
+            x: 130,
+            y: sueloY - 68,
+            radio: 54,
+            creadoEn: Date.now()
+        };
+
+        playerN5 = {
+            x: 115,
+            y: sueloY - jugador.tam,
+            vx: 0,
+            vy: 0,
+            vel: 6.4,
+            gravedad: 0.72,
+            enSuelo: true,
+            saliendoPortal: true,
+            inicioSalida: Date.now()
+        };
+        puedeMoverse = false;
+        document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 5 — CRUZANDO EL PORTAL HACIA EL PUENTE...';
+
+        tramosPuenteN5 = [
+            { x: 0, ancho: 1150, tipo: 'puente' },
+            { x: 1290, ancho: 1100, tipo: 'puente' },
+            { x: 2540, ancho: 1860, tipo: 'puente' },
+            { x: 4400, ancho: 1450, tipo: 'ciudad' },
+            { x: 5990, ancho: 1550, tipo: 'ciudad' },
+            { x: 7680, ancho: 1600, tipo: 'ciudad' }
+        ];
+
+        cochesDestruidosN5 = [
+            { x: 430, ancho: 135, alto: 44, tipo: 'sedan', enLlamas: true },
+            { x: 860, ancho: 175, alto: 62, tipo: 'camion', enLlamas: false },
+            { x: 1520, ancho: 140, alto: 46, tipo: 'sedan', enLlamas: true },
+            { x: 1980, ancho: 185, alto: 66, tipo: 'tanqueta', enLlamas: true },
+            { x: 2820, ancho: 145, alto: 46, tipo: 'sedan', enLlamas: false },
+            { x: 3420, ancho: 180, alto: 64, tipo: 'camion', enLlamas: true },
+            { x: 4050, ancho: 150, alto: 48, tipo: 'sedan', enLlamas: true },
+            { x: 4720, ancho: 190, alto: 68, tipo: 'tanqueta', enLlamas: true },
+            { x: 5280, ancho: 145, alto: 46, tipo: 'sedan', enLlamas: false },
+            { x: 6240, ancho: 185, alto: 64, tipo: 'camion', enLlamas: true },
+            { x: 6950, ancho: 150, alto: 46, tipo: 'sedan', enLlamas: true },
+            { x: 7950, ancho: 195, alto: 68, tipo: 'tanqueta', enLlamas: true }
+        ];
+
+        enemigosN5 = [];
+        proyectilesAcidoN5 = [];
+        charcosAcidoN5 = [];
+        const tamEnemigo = 62;
+        const posicionesOleadas = [
+            600, 700, 800, 1030, 1100,
+            1440, 1550, 1730, 1840, 2140, 2250,
+            2700, 2830, 3050, 3180, 3550, 3680,
+            4580, 4700, 4950, 5100, 5450, 5600,
+            6150, 6300, 6650, 6800, 7150, 7300,
+            7850, 8050, 8250
+        ];
+        posicionesOleadas.forEach((px, idx) => {
+            enemigosN5.push(crearEnemigoTiranidoN5(px, sueloY - tamEnemigo, idx % 2 === 0));
+        });
+        ultimoSpawnHordaN5 = Date.now();
+
+        guardianesEliteN5 = [];
+        const altoElite = 104;
+        [3850, 5150, 6550, 7420, 8200].forEach(gx => {
+            guardianesEliteN5.push(crearGuardianEliteN5(gx, sueloY - altoElite));
+        });
+        ultimoSpawnEliteN5 = Date.now();
+
+        edificiosLejanosN5 = [];
+        for (let lx = -120; lx < 4800; lx += 95) {
+            edificiosLejanosN5.push({
+                x: lx,
+                ancho: 70 + (Math.abs(lx * 7) % 50),
+                alto: 220 + (Math.abs(lx * 11) % 160),
+                aguja: (lx % 285 === 0)
+            });
+        }
+
+        edificiosFondoN5 = [];
+        for (let bx = -100; bx < 4800; bx += 165) {
+            const esTorreReloj = (Math.abs(bx - 560) < 90 || Math.abs(bx - 2210) < 90 || Math.abs(bx - 3650) < 90);
+            const ventanasRotas = [];
+            const cols = esTorreReloj ? 3 : 4;
+            const filas = esTorreReloj ? 9 : 7;
+            for (let r = 0; r < filas; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const hash = Math.abs(bx * 13 + r * 7 + c * 3);
+                    ventanasRotas.push({
+                        r, c,
+                        encendida: (hash % 5 === 0) || (esTorreReloj && hash % 3 === 0),
+                        destruida: (hash % 4 === 0)
+                    });
+                }
+            }
+            edificiosFondoN5.push({
+                x: bx,
+                ancho: esTorreReloj ? 86 : (115 + (Math.abs(bx) % 50)),
+                alto: esTorreReloj ? 360 : (175 + (Math.abs(bx * 5) % 135)),
+                enLlamas: (bx % 330 === 0) || esTorreReloj,
+                esTorreReloj: esTorreReloj,
+                vigasExpuestas: (bx % 495 === 0),
+                ventanas: ventanasRotas
+            });
+        }
+
+        edificiosPrimerPlanoCiudadN5 = [];
+        for (let cx = 4350; cx < NIVEL5_LONGITUD + 400; cx += 280) {
+            edificiosPrimerPlanoCiudadN5.push({
+                x: cx,
+                ancho: 210 + (cx % 65),
+                alto: 260 + ((cx * 3) % 150),
+                arcoEntrada: (cx % 560 === 0),
+                enLlamas: (cx % 840 === 0)
+            });
+        }
+
+        soldadosAliadosFondoN5 = [];
+        for (let sx = 320; sx < NIVEL5_LONGITUD; sx += 460) {
+            soldadosAliadosFondoN5.push({
+                x: sx,
+                dir: 1,
+                cicloDisparo: (sx * 17) % 1200,
+                monstruoObjetivoX: sx + 170 + (sx % 60)
+            });
+            if (sx % 920 === 0) {
+                soldadosAliadosFondoN5.push({
+                    x: sx + 38,
+                    dir: 1,
+                    cicloDisparo: ((sx + 400) * 13) % 1200,
+                    monstruoObjetivoX: sx + 210
+                });
+            }
+        }
+
+        monstruosFondoN5 = [
+            { x: 460, alto: 285, fase: 0 },
+            { x: 1450, alto: 325, fase: 1.8 },
+            { x: 2520, alto: 300, fase: 3.4 },
+            { x: 3580, alto: 340, fase: 0.9 }
+        ];
+
+        navesFondoN5 = [];
+        for (let i = 0; i < 8; i++) {
+            navesFondoN5.push({
+                x: i * 290,
+                y: 68 + (i % 3) * 46,
+                vx: (i % 2 === 0 ? 1 : -1) * (2.3 + (i % 3) * 0.65),
+                dir: i % 2 === 0 ? 1 : -1,
+                ultimoLaser: Date.now() + i * 380
+            });
+        }
+
+        chispasGuerraN5 = [];
+        for (let i = 0; i < 50; i++) {
+            chispasGuerraN5.push({
+                x: Math.random() * 1600,
+                y: Math.random() * 700,
+                vx: -0.6 - Math.random() * 1.2,
+                vy: -0.8 - Math.random() * 1.4,
+                tam: 1.5 + Math.random() * 2.2
+            });
+        }
+
+        bucleNivel5();
+    }
+
+    function crearEnemigoTiranidoN5(x, y, corredor) {
+        contadorEnemigosCreadosN5++;
+        const esLanzadorAcido = (contadorEnemigosCreadosN5 % 5 === 0);
+        const tam = 62;
+        return {
+            x: x,
+            y: y,
+            tam: tam,
+            vx: esLanzadorAcido ? -1.9 : (corredor ? -3.1 : -2.2),
+            vy: 0,
+            enSuelo: true,
+            vida: 30,
+            vidaMax: 30,
+            flashHasta: 0,
+            pasoAnim: Math.random() * 10,
+            esLanzadorAcido: esLanzadorAcido,
+            ultimoAcido: Date.now() + Math.random() * 800,
+            animEscupirHasta: 0
+        };
+    }
+
+    function crearGuardianEliteN5(x, y) {
+        return {
+            x: x,
+            y: y,
+            ancho: 112,
+            alto: 104,
+            vx: -1.75,
+            vy: 0,
+            enSuelo: true,
+            vida: 200,
+            vidaMax: 200,
+            flashHasta: 0,
+            pasoAnim: Math.random() * 10,
+            estadoAtaque: 'caminando',
+            inicioAtaque: 0,
+            golpeAplicadoEnEsteTajo: false
+        };
+    }
+
+    // Absorber impacto con el escudo (aguanta 3 ataques del jefe final antes de romperse)
+    function absorberGolpeEscudoContraJefe() {
+        if (!estadoMarineP2.escudoActivo || estadoMarineP2.escudoRoto) return false;
+        estadoMarineP2.escudoGolpesRestantes--;
+        jugador.invulnerableHasta = Date.now() + 550;
+        if (estadoMarineP2.escudoGolpesRestantes <= 0) {
+            estadoMarineP2.escudoGolpesRestantes = 0;
+            estadoMarineP2.escudoActivo = false;
+            estadoMarineP2.escudoRoto = true;
+        }
+        actualizarHudMarineP2();
+        return true;
+    }
+
+    function recibirDanioJugadorNivel5(cantidad = 1, esDeJefeFinal = false) {
+        const ahora = Date.now();
+        if (ahora < jugador.invulnerableHasta || jugador.vidas <= 0) return;
+
+        if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) {
+            if (esDeJefeFinal) {
+                absorberGolpeEscudoContraJefe();
+            }
+            return;
+        }
+
+        jugador.vidas = Math.max(0, jugador.vidas - cantidad);
+        jugador.invulnerableHasta = ahora + 1150;
+        actualizarCorazonesUI();
+
+        if (jugador.vidas <= 0) {
+            puedeMoverse = false;
+            textoContador = 'GAME OVER';
+            document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 5 — CAÍSTE EN COMBATE';
+        }
+    }
+
+    // ============================================================
+    // 6. ACTIVAR ARENA TOP-DOWN EN EL CENTRO DE LA CIUDAD (JEFE FINAL)
+    // ============================================================
+    function iniciarArenaJefeTopDownN5() {
+        const w = canvas.width;
+        const h = canvas.height;
+        const ahora = Date.now();
+        modoArenaTopDownN5 = true;
+        estadoMarineP2.balas = [];
+        proyectilesAcidoN5 = [];
+        charcosAcidoN5 = [];
+        enemigosN5 = [];
+        guardianesEliteN5 = [];
+
+        // REGENERAR TODOS LOS CORAZONES PERDIDOS AL EMPEZAR LA PELEA CONTRA EL JEFE FINAL
+        jugador.vidas = jugador.vidasMax;
+        jugador.invulnerableHasta = ahora + 1200;
+        destelloCuracionHastaN5 = ahora + 1400;
+        actualizarCorazonesUI();
+
+        // Posicionar al jugador en el sector izquierdo/inferior de la plaza central
+        playerN5.x = w * 0.22;
+        playerN5.y = h * 0.55;
+        playerN5.vx = 0;
+        playerN5.vy = 0;
+        estadoMarineP2.anguloTopDown = 0;
+
+        // Cráteres decorativos de la plaza central de la ciudad
+        crateresPlazaN5 = [];
+        for (let i = 0; i < 14; i++) {
+            crateresPlazaN5.push({
+                x: 110 + ((i * 197) % (w - 220)),
+                y: 110 + ((i * 139) % (h - 220)),
+                radio: 22 + (i % 4) * 14
+            });
+        }
+
+        // Jefe Final: Depredador Alfa (Von Ryan's Leaper) — 3 veces el tamaño del jugador (138px), 3000 HP
+        const tamJefe = jugador.tam * 3; // 138px
+        jefeFinalN5 = {
+            x: w * 0.72,
+            y: h * 0.50,
+            radio: tamJefe * 0.48,
+            tam: tamJefe,
+            angulo: Math.PI,
+            vida: 3000,
+            vidaMax: 3000,
+            muerto: false,
+            flashHasta: 0,
+            estado: 'acechando',
+            inicioEstado: ahora,
+            proximoAtaqueEn: ahora + 1200,
+            embestidaOrigenX: 0,
+            embestidaOrigenY: 0,
+            embestidaDestinoX: 0,
+            embestidaDestinoY: 0,
+            embestidaGolpeo: false,
+            colaAnguloCentro: 0,
+            colaAlcance: 255,
+            colaGolpeo: false
+        };
+
+        avisosAcidoTopDownN5 = [];
+        charcosAcidoTopDownN5 = [];
+        minionsTopDownN5 = [];
+        ultimoSpawnMinionTopDownN5 = ahora;
+
+        document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 5 — JEFE FINAL: DEPREDADOR ALFA DE LA COLMENA (CENTRO DE LA CIUDAD)';
+        actualizarHudMarineP2();
+    }
+
+    // ============================================================
+    // 7. DETONACIÓN DEL JEFE Y CINEMÁTICA CON SOLDADOS ALIADOS -> NIVEL 6
+    // ============================================================
+    function iniciarExplosionYCinematicaN5(jefeX, jefeY, ahora) {
+        const w = canvas.width;
+        const h = canvas.height;
+        minionsTopDownN5 = [];
+        avisosAcidoTopDownN5 = [];
+        charcosAcidoTopDownN5 = [];
+        estadoMarineP2.balas = [];
+        estadoMarineP2.disparando = false;
+        estadoMarineP2.escudoActivo = false;
+        puedeMoverse = false;
+
+        // Partículas de explosión masiva del Jefe Final
+        const fragmentos = [];
+        const coloresFrag = ['#f43f5e', '#c026d3', '#fb923c', '#facc15', '#f3e8ff', '#a3e635'];
+        for (let i = 0; i < 65; i++) {
+            const ang = (Math.PI * 2 * i) / 65 + Math.random() * 0.2;
+            const vel = 2.5 + Math.random() * 8.5;
+            fragmentos.push({
+                x: jefeX,
+                y: jefeY,
+                vx: Math.cos(ang) * vel,
+                vy: Math.sin(ang) * vel,
+                radio: 4 + Math.random() * 7,
+                color: coloresFrag[i % coloresFrag.length],
+                alfa: 1
+            });
+        }
+
+        explosionJefeN5 = {
+            x: jefeX,
+            y: jefeY,
+            inicio: ahora,
+            duracion: 1700,
+            fragmentos: fragmentos
+        };
+
+        // Escuadrón de soldados aliados entrando desde el borde derecho de la plaza
+        const aliados = [
+            { x: w + 60, y: h * 0.34, destX: w * 0.72, destY: h * 0.34, esComandante: false },
+            { x: w + 90, y: h * 0.44, destX: w * 0.76, destY: h * 0.44, esComandante: true },
+            { x: w + 60, y: h * 0.56, destX: w * 0.76, destY: h * 0.56, esComandante: false },
+            { x: w + 95, y: h * 0.66, destX: w * 0.72, destY: h * 0.66, esComandante: false }
+        ];
+
+        cinematicaAliadosN5 = {
+            activa: false,
+            inicio: 0,
+            aliados: aliados,
+            reunidoEn: 0,
+            transicionIniciada: false
+        };
+
+        document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 5 — ¡DEPREDADOR ALFA ANIQUILADO!';
+    }
+
+    function dibujarSoldadoAliadoTopDownN5(aliado, ahora, celebrando) {
+        const radio = jugador.tam * 0.52;
+        ctx.save();
+        ctx.translate(aliado.x, aliado.y);
+
+        // Sombra
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+        ctx.beginPath();
+        ctx.arc(3, 4, radio * 0.95, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Miran hacia el jugador (izquierda)
+        ctx.rotate(Math.PI);
+
+        // Hombreras azul cobalto / dorado de los refuerzos aliados
+        ctx.fillStyle = aliado.esComandante ? '#1d4ed8' : '#1e3a8a';
+        ctx.strokeStyle = aliado.esComandante ? '#facc15' : '#93c5fd';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.roundRect(-radio * 0.55, -radio * 0.95, radio * 0.95, radio * 0.55, 5);
+        ctx.roundRect(-radio * 0.55, radio * 0.40, radio * 0.95, radio * 0.55, 5);
+        ctx.fill();
+        ctx.stroke();
+
+        // Mochila dorsal
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(-radio * 0.92, -radio * 0.48, radio * 0.45, radio * 0.96);
+
+        // Casco
+        ctx.fillStyle = aliado.esComandante ? '#facc15' : '#2563eb';
+        ctx.beginPath();
+        ctx.arc(radio * 0.08, 0, radio * 0.62, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Visor
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.moveTo(radio * 0.45, -radio * 0.25);
+        ctx.lineTo(radio * 0.66, -radio * 0.10);
+        ctx.lineTo(radio * 0.66, radio * 0.10);
+        ctx.lineTo(radio * 0.45, radio * 0.25);
+        ctx.closePath();
+        ctx.fill();
+
+        // Bólter (con animación de saludo/celebración cuando el jugador llega)
+        const pulsoSaludo = celebrando ? Math.sin(ahora / 110) * 4 : 0;
+        ctx.fillStyle = '#991b1b';
+        ctx.fillRect(radio * 0.25 + pulsoSaludo, radio * 0.16, radio * 1.1, 10);
+
+        ctx.restore();
+    }
+
+    // ============================================================
+    // 8. DIBUJO DE LA ARENA DE VISTA SUPERIOR Y DEL JEFE ATERRADOR
+    // ============================================================
+    function dibujarArenaCiudadTopDownN5(w, h, ahora) {
+        const plazaGrad = ctx.createRadialGradient(w / 2, h / 2, 60, w / 2, h / 2, Math.max(w, h) * 0.65);
+        plazaGrad.addColorStop(0, '#2c272e');
+        plazaGrad.addColorStop(0.65, '#1d1920');
+        plazaGrad.addColorStop(1, '#110e14');
+        ctx.fillStyle = plazaGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.strokeStyle = 'rgba(113, 113, 122, 0.16)';
+        ctx.lineWidth = 2;
+        for (let gx = 0; gx < w; gx += 72) {
+            ctx.beginPath();
+            ctx.moveTo(gx, 0);
+            ctx.lineTo(gx, h);
+            ctx.stroke();
+        }
+        for (let gy = 0; gy < h; gy += 72) {
+            ctx.beginPath();
+            ctx.moveTo(0, gy);
+            ctx.lineTo(w, gy);
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = 'rgba(234, 179, 8, 0.25)';
+        for (let lx = 90; lx < w - 90; lx += 80) {
+            ctx.fillRect(lx, h / 2 - 3, 42, 6);
+        }
+
+        crateresPlazaN5.forEach(cr => {
+            ctx.fillStyle = 'rgba(9, 7, 12, 0.72)';
+            ctx.beginPath();
+            ctx.arc(cr.x, cr.y, cr.radio, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(82, 82, 91, 0.45)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        });
+
+        const borde = 58;
+        ctx.fillStyle = '#141118';
+        ctx.strokeStyle = '#3f3f46';
+        ctx.lineWidth = 3;
+        ctx.fillRect(0, 0, w, borde);
+        ctx.fillRect(0, h - borde, w, borde);
+        ctx.fillRect(0, 0, borde, h);
+        ctx.fillRect(w - borde, 0, borde, h);
+        ctx.strokeRect(borde, borde, w - borde * 2, h - borde * 2);
+
+        const pulsoFuego = 0.22 + Math.sin(ahora / 180) * 0.06;
+        ctx.fillStyle = `rgba(234, 88, 12, ${pulsoFuego})`;
+        ctx.fillRect(0, 0, w, 24);
+        ctx.fillRect(0, h - 24, w, 24);
+    }
+
+    // DISEÑO ATERRADOR Y BIOMECÁNICO DEL JEFE FINAL EN VISTA AÉREA (VON RYAN'S LEAPER)[cite: 12]
+    function dibujarJefeVonRyanTopDownN5(jefe, ahora) {
+        const golpeado = ahora < jefe.flashHasta;
+        const tam = jefe.tam; // 138px (3 veces el jugador)
+        const R = tam * 0.48;
+        const latido = Math.sin(ahora / 95) * 2.5;
+
+        ctx.save();
+        ctx.translate(jefe.x, jefe.y);
+
+        // Aura oscura de terror alrededor de la bestia
+        const auraTerror = ctx.createRadialGradient(0, 0, R * 0.3, 0, 0, R * 1.65);
+        auraTerror.addColorStop(0, 'rgba(88, 28, 135, 0.35)');
+        auraTerror.addColorStop(0.6, 'rgba(159, 18, 57, 0.16)');
+        auraTerror.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = auraTerror;
+        ctx.beginPath();
+        ctx.arc(0, 0, R * 1.65, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Sombra irregular proyectada en el asfalto
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';
+        ctx.beginPath();
+        ctx.ellipse(8, 12, R * 1.35, R * 0.95, jefe.angulo, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.rotate(jefe.angulo);
+
+        // Animación agresiva de las 4 guadañas[cite: 12]
+        let anguloGuadanaSup = 0.85 + Math.sin(ahora / 105) * 0.16;
+        let anguloGuadanaInf = 0.48 + Math.cos(ahora / 105) * 0.14;
+        let empujeFrontal = 0;
+
+        if (jefe.estado === 'aviso_embestida') {
+            anguloGuadanaSup = 1.45; // Abre las 4 guadañas como tenazas gigantes antes de embestir
+            anguloGuadanaInf = 1.05;
+        } else if (jefe.estado === 'embistiendo') {
+            anguloGuadanaSup = 0.32; // Cierra las 4 cuchillas al frente triturando el aire
+            anguloGuadanaInf = 0.18;
+            empujeFrontal = 20;
+        }
+
+        // 1. COLA LÁTIGO ARTICULADA CON VÉRTEBRAS ESPINOSAS Y AGUIJÓN VENENOSO[cite: 12]
+        let anguloCola = Math.sin(ahora / 130) * 0.28;
+        if (jefe.estado === 'aviso_cola') {
+            anguloCola = -1.05;
+        } else if (jefe.estado === 'golpe_cola') {
+            const prog = Math.min(1, (ahora - jefe.inicioEstado) / 220);
+            anguloCola = -1.05 + prog * 2.15;
+        }
+
+        ctx.save();
+        ctx.rotate(anguloCola);
+        const segsCola = 6;
+        for (let s = 0; s < segsCola; s++) {
+            const cxSeg = -R * (0.65 + s * 0.24);
+            const cySeg = Math.sin(ahora / 120 + s * 0.9) * (3 + s * 1.5);
+            const rSeg = Math.max(4.5, 13 - s * 1.5);
+
+            // Vértebra quitinosa
+            ctx.fillStyle = golpeado ? '#ffffff' : (s % 2 === 0 ? '#3b0764' : '#f3e8ff');
+            ctx.strokeStyle = '#1e1b4b';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(cxSeg + rSeg, 0);
+            ctx.lineTo(cxSeg, cySeg - rSeg);
+            ctx.lineTo(cxSeg - rSeg * 1.2, 0);
+            ctx.lineTo(cxSeg, cySeg + rSeg);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Espinas laterales de la cola
+            ctx.fillStyle = golpeado ? '#ffffff' : '#9f1239';
+            ctx.beginPath();
+            ctx.moveTo(cxSeg, cySeg - rSeg);
+            ctx.lineTo(cxSeg - 6, cySeg - rSeg - 8);
+            ctx.lineTo(cxSeg - 8, cySeg - rSeg + 2);
+            ctx.moveTo(cxSeg, cySeg + rSeg);
+            ctx.lineTo(cxSeg - 6, cySeg + rSeg + 8);
+            ctx.lineTo(cxSeg - 8, cySeg + rSeg - 2);
+            ctx.fill();
+        }
+        // Aguijón curvo letal en la punta de la cola[cite: 12]
+        const puntaX = -R * 2.15;
+        ctx.fillStyle = golpeado ? '#ffffff' : '#be123c';
+        ctx.strokeStyle = '#fecdd3';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(-R * 1.95, -5);
+        ctx.quadraticCurveTo(puntaX - 18, -14, puntaX - 28, 8);
+        ctx.quadraticCurveTo(puntaX - 10, 4, -R * 1.95, 5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        // 2. LAS 4 CUCHILLAS GUADAÑA ARTICULADAS ABIERTAS (2 COLOSALES + 2 SEGADORAS)[cite: 12]
+        [-1, 1].forEach(lado => {
+            // A) Par Superior: Guadañas biomecánicas gigantes con codo articulado[cite: 12]
+            ctx.save();
+            ctx.translate(R * 0.12 + empujeFrontal * 0.6, lado * R * 0.38);
+            ctx.rotate(lado * anguloGuadanaSup);
+
+            // Húmero quitinoso con púas
+            ctx.fillStyle = golpeado ? '#ffffff' : '#e9d5ff';
+            ctx.strokeStyle = '#2e1065';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, -6);
+            ctx.lineTo(R * 0.72, -9);
+            ctx.lineTo(R * 0.78, 0);
+            ctx.lineTo(R * 0.72, 9);
+            ctx.lineTo(0, 6);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Espolón óseo en el codo
+            ctx.fillStyle = golpeado ? '#ffffff' : '#581c87';
+            ctx.beginPath();
+            ctx.moveTo(R * 0.58, lado * 8);
+            ctx.lineTo(R * 0.42, lado * 24);
+            ctx.lineTo(R * 0.74, lado * 9);
+            ctx.closePath();
+            ctx.fill();
+
+            // Antebrazo articulado hacia adelante[cite: 12]
+            ctx.translate(R * 0.72, 0);
+            ctx.rotate(-lado * 0.62);
+
+            ctx.fillStyle = golpeado ? '#ffffff' : '#3b0764';
+            ctx.beginPath();
+            ctx.roundRect(0, -6, R * 0.58, 12, 3);
+            ctx.fill();
+
+            // Hoja guadaña curva serrada carmesí-negra de gran tamaño[cite: 12]
+            const hojaGrad = ctx.createLinearGradient(R * 0.52, 0, R * 1.65, -lado * 26);
+            hojaGrad.addColorStop(0, golpeado ? '#ffffff' : '#090d16');
+            hojaGrad.addColorStop(0.45, golpeado ? '#ffffff' : '#881337');
+            hojaGrad.addColorStop(1, golpeado ? '#ffffff' : '#fb7185');
+            ctx.fillStyle = hojaGrad;
+            ctx.strokeStyle = '#ffe4e6';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(R * 0.52, -7);
+            ctx.quadraticCurveTo(R * 1.25, -lado * 22, R * 1.68, -lado * 34);
+            // Dientes de sierra en el filo interior
+            ctx.lineTo(R * 1.38, -lado * 12);
+            ctx.lineTo(R * 1.28, -lado * 16);
+            ctx.lineTo(R * 1.12, -lado * 4);
+            ctx.lineTo(R * 1.00, -lado * 8);
+            ctx.lineTo(R * 0.82, lado * 4);
+            ctx.lineTo(R * 0.52, 7);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+
+            // B) Par Inferior: Garras segadoras frontales afiladas[cite: 12]
+            ctx.save();
+            ctx.translate(R * 0.36 + empujeFrontal, lado * R * 0.28);
+            ctx.rotate(lado * anguloGuadanaInf);
+
+            ctx.fillStyle = golpeado ? '#ffffff' : '#d8b4fe';
+            ctx.strokeStyle = '#3b0764';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.roundRect(0, -5, R * 0.56, 10, 3);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.translate(R * 0.52, 0);
+            ctx.rotate(-lado * 0.45);
+            ctx.fillStyle = golpeado ? '#ffffff' : '#be123c';
+            ctx.strokeStyle = '#fda4af';
+            ctx.beginPath();
+            ctx.moveTo(0, -5);
+            ctx.quadraticCurveTo(R * 0.55, -lado * 10, R * 0.92, -lado * 16);
+            ctx.lineTo(R * 0.45, lado * 5);
+            ctx.lineTo(0, 5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        });
+
+        // 3. TORSO ESQUELÉTICO SEGMENTADO Y COSTILLAS QUITIINOSAS (Sin forma ovalada)
+        // Caja torácica angular pálida con costillas expuestas
+        ctx.fillStyle = golpeado ? '#ffffff' : '#ede9fe';
+        ctx.strokeStyle = '#2e1065';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(R * 0.52, -R * 0.24);
+        ctx.lineTo(R * 0.20, -R * 0.52 - latido * 0.4);
+        ctx.lineTo(-R * 0.35, -R * 0.44);
+        ctx.lineTo(-R * 0.68, -R * 0.18);
+        ctx.lineTo(-R * 0.68, R * 0.18);
+        ctx.lineTo(-R * 0.35, R * 0.44);
+        ctx.lineTo(R * 0.20, R * 0.52 + latido * 0.4);
+        ctx.lineTo(R * 0.52, R * 0.24);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Costillas laterales oscuras y músculo carmesí pulsante entre placas
+        ctx.strokeStyle = '#881337';
+        ctx.lineWidth = 3;
+        for (let rib = -R * 0.38; rib <= R * 0.26; rib += 16) {
+            ctx.beginPath();
+            ctx.moveTo(rib, -R * 0.44);
+            ctx.lineTo(rib + 10, -R * 0.22);
+            ctx.moveTo(rib, R * 0.44);
+            ctx.lineTo(rib + 10, R * 0.22);
+            ctx.stroke();
+        }
+
+        // Placas blindadas dorsales afiladas morado-negro en forma de punta de flecha
+        const placas = [
+            { x: -R * 0.52, w: 28, h: R * 0.32 },
+            { x: -R * 0.24, w: 34, h: R * 0.44 },
+            { x: R * 0.08,  w: 38, h: R * 0.48 }
+        ];
+        placas.forEach(pl => {
+            ctx.fillStyle = golpeado ? '#ffffff' : '#2e1065';
+            ctx.strokeStyle = '#a855f7';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(pl.x + pl.w, 0);
+            ctx.lineTo(pl.x, -pl.h);
+            ctx.lineTo(pl.x - 10, -pl.h * 0.65);
+            ctx.lineTo(pl.x + 4, 0);
+            ctx.lineTo(pl.x - 10, pl.h * 0.65);
+            ctx.lineTo(pl.x, pl.h);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Espina dorsal central afilada
+            ctx.fillStyle = golpeado ? '#ffffff' : '#f43f5e';
+            ctx.beginPath();
+            ctx.moveTo(pl.x + pl.w + 6, 0);
+            ctx.lineTo(pl.x - 4, -5);
+            ctx.lineTo(pl.x - 4, 5);
+            ctx.closePath();
+            ctx.fill();
+        });
+
+        // 4. CRÁNEO DE PESADILLA, MANDÍBULAS ABIERTAS Y TENTÁCULOS FACIALES NARANJAS[cite: 12]
+        // Tentáculos bucales retorciéndose bajo el cráneo
+        const vib = Math.sin(ahora / 65) * 4.5;
+        ctx.strokeStyle = '#f97316';
+        ctx.lineWidth = 3.4;
+        ctx.lineCap = 'round';
+        [-11, -5, 5, 11].forEach((ty, idx) => {
+            const signo = idx % 2 === 0 ? 1 : -1;
+            ctx.beginPath();
+            ctx.moveTo(R * 0.68, ty * 0.5);
+            ctx.bezierCurveTo(
+                R * 0.92, ty + signo * vib,
+                R * 1.05, ty * 1.4 - signo * vib,
+                R * 1.24, ty * 1.1 + signo * vib
+            );
+            ctx.stroke();
+        });
+
+        // Mandíbulas laterales con colmillos
+        [-1, 1].forEach(lado => {
+            ctx.fillStyle = golpeado ? '#ffffff' : '#f3e8ff';
+            ctx.strokeStyle = '#3b0764';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(R * 0.48, lado * 10);
+            ctx.lineTo(R * 0.96, lado * 16);
+            ctx.lineTo(R * 0.84, lado * 6);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+        });
+
+        // Cráneo alargado con cresta sagital ósea[cite: 12]
+        ctx.fillStyle = golpeado ? '#ffffff' : '#3b0764';
+        ctx.strokeStyle = '#c084fc';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(R * 0.36, -R * 0.24);
+        ctx.lineTo(R * 0.98, 0);
+        ctx.lineTo(R * 0.36, R * 0.24);
+        ctx.lineTo(R * 0.26, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Cresta afilada central del cráneo
+        ctx.fillStyle = golpeado ? '#ffffff' : '#f3e8ff';
+        ctx.beginPath();
+        ctx.moveTo(R * 0.32, -4);
+        ctx.lineTo(R * 1.04, 0);
+        ctx.lineTo(R * 0.32, 4);
+        ctx.closePath();
+        ctx.fill();
+
+        // 4 Ojos infernales brillantes
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath();
+        ctx.ellipse(R * 0.66, -9, 4.5, 2.2, 0.25, 0, Math.PI * 2);
+        ctx.ellipse(R * 0.66, 9, 4.5, 2.2, -0.25, 0, Math.PI * 2);
+        ctx.ellipse(R * 0.78, -6, 3.2, 1.6, 0.25, 0, Math.PI * 2);
+        ctx.ellipse(R * 0.78, 6, 3.2, 1.6, -0.25, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+
+    // ============================================================
+    // 9. FONDO PROGRESIVO (TRAMO LATERAL PUENTE -> CIUDAD)
+    // ============================================================
+    function dibujarFondoGuerraN5(w, h, sueloY, ahora) {
+        const factorCiudad = Math.max(0, Math.min(1, (camaraX_N5 - (NIVEL5_FIN_PUENTE - 650)) / 650));
+
+        const cieloGrad = ctx.createLinearGradient(0, 0, 0, sueloY);
+        cieloGrad.addColorStop(0, factorCiudad > 0.5 ? '#140c14' : '#0f0d13');
+        cieloGrad.addColorStop(0.35, factorCiudad > 0.5 ? '#361d24' : '#27232c');
+        cieloGrad.addColorStop(0.72, '#692416');
+        cieloGrad.addColorStop(1, '#ea580c');
+        ctx.fillStyle = cieloGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.fillStyle = 'rgba(15, 12, 18, 0.48)';
+        for (let nx = -100; nx < w + 250; nx += 240) {
+            const shift = ((ahora / 60) % 240);
+            ctx.beginPath();
+            ctx.ellipse(nx - shift, 90, 175, 50, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        const parallaxLejano = camaraX_N5 * 0.12;
+        edificiosLejanosN5.forEach(lej => {
+            const lx = ((lej.x - parallaxLejano) % 4600 + 4600) % 4600 - 150;
+            if (lx < -140 || lx > w + 140) return;
+            const topY = sueloY - lej.alto;
+            ctx.fillStyle = '#18141c';
+            ctx.fillRect(lx, topY, lej.ancho, lej.alto);
+            if (lej.aguja) {
+                ctx.beginPath();
+                ctx.moveTo(lx + lej.ancho * 0.25, topY);
+                ctx.lineTo(lx + lej.ancho * 0.5, topY - 45);
+                ctx.lineTo(lx + lej.ancho * 0.75, topY);
+                ctx.closePath();
+                ctx.fill();
+            }
+        });
+
+        const parallaxMonstruos = camaraX_N5 * 0.18;
+        monstruosFondoN5.forEach(m => {
+            const mx = ((m.x - parallaxMonstruos) % 3600 + 3600) % 3600 - 200;
+            const balanceo = Math.sin(ahora / 650 + m.fase) * 9;
+            ctx.save();
+            ctx.fillStyle = 'rgba(12, 8, 16, 0.68)';
+            ctx.beginPath();
+            ctx.moveTo(mx - 70, sueloY);
+            ctx.lineTo(mx - 44 + balanceo, sueloY - m.alto * 0.65);
+            ctx.lineTo(mx - 92 + balanceo, sueloY - m.alto * 0.86);
+            ctx.lineTo(mx - 22 + balanceo, sueloY - m.alto * 0.78);
+            ctx.lineTo(mx + balanceo, sueloY - m.alto);
+            ctx.lineTo(mx + 30 + balanceo, sueloY - m.alto * 0.76);
+            ctx.lineTo(mx + 96 + balanceo, sueloY - m.alto * 0.68);
+            ctx.lineTo(mx + 54, sueloY);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        });
+
+        navesFondoN5.forEach(nave => {
+            nave.x += nave.vx;
+            if (nave.x > w + 180) nave.x = -180;
+            if (nave.x < -180) nave.x = w + 180;
+
+            ctx.save();
+            ctx.translate(nave.x, nave.y);
+            ctx.scale(nave.dir, 1);
+
+            ctx.fillStyle = '#0f172a';
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(-34, 4);
+            ctx.lineTo(-18, -9);
+            ctx.lineTo(14, -7);
+            ctx.lineTo(38, 2);
+            ctx.lineTo(22, 10);
+            ctx.lineTo(-26, 10);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#fb923c';
+            ctx.fillRect(-38, 1, 6, 4);
+            ctx.fillRect(-36, 6, 5, 3);
+
+            if ((ahora - nave.ultimoLaser) % 1500 < 190) {
+                ctx.strokeStyle = 'rgba(253, 224, 71, 0.85)';
+                ctx.lineWidth = 2.2;
+                ctx.beginPath();
+                ctx.moveTo(32, 4);
+                ctx.lineTo(175, 135);
+                ctx.stroke();
+            }
+            ctx.restore();
+        });
+
+        const parallaxCiudad = camaraX_N5 * 0.34;
+        edificiosFondoN5.forEach(ed => {
+            const ex = ((ed.x - parallaxCiudad) % 4600 + 4600) % 4600 - 200;
+            if (ex < -180 || ex > w + 180) return;
+
+            const topY = sueloY - ed.alto;
+            const fachGrad = ctx.createLinearGradient(ex, topY, ex + ed.ancho, sueloY);
+            fachGrad.addColorStop(0, '#262129');
+            fachGrad.addColorStop(0.5, '#1b171e');
+            fachGrad.addColorStop(1, '#120f14');
+            ctx.fillStyle = fachGrad;
+            ctx.fillRect(ex, topY, ed.ancho, ed.alto);
+
+            ctx.strokeStyle = 'rgba(249, 115, 22, 0.28)';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(ex, topY, ed.ancho, ed.alto);
+
+            ctx.fillStyle = '#141117';
+            ctx.beginPath();
+            ctx.moveTo(ex, topY);
+            ctx.lineTo(ex + ed.ancho * 0.22, topY - 16);
+            ctx.lineTo(ex + ed.ancho * 0.45, topY + 12);
+            ctx.lineTo(ex + ed.ancho * 0.72, topY - 14);
+            ctx.lineTo(ex + ed.ancho, topY + 6);
+            ctx.lineTo(ex + ed.ancho, topY + 24);
+            ctx.lineTo(ex, topY + 24);
+            ctx.closePath();
+            ctx.fill();
+
+            if (ed.vigasExpuestas || ed.enLlamas) {
+                ctx.strokeStyle = '#52525b';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(ex + ed.ancho * 0.25, topY - 10);
+                ctx.lineTo(ex + ed.ancho * 0.28, topY - 34);
+                ctx.moveTo(ex + ed.ancho * 0.70, topY - 8);
+                ctx.lineTo(ex + ed.ancho * 0.76, topY - 30);
+                ctx.stroke();
+            }
+
+            if (ed.esTorreReloj) {
+                ctx.fillStyle = '#29242e';
+                ctx.beginPath();
+                ctx.moveTo(ex + 6, topY);
+                ctx.lineTo(ex + ed.ancho * 0.46, topY - 68);
+                ctx.lineTo(ex + ed.ancho - 6, topY);
+                ctx.closePath();
+                ctx.fill();
+
+                const rcx = ex + ed.ancho / 2;
+                const rcy = topY + 42;
+                ctx.fillStyle = '#fef08a';
+                ctx.beginPath();
+                ctx.arc(rcx, rcy, 18, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#1c1917';
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+            }
+
+            const cols = ed.esTorreReloj ? 3 : 4;
+            const padX = 12;
+            const stepX = (ed.ancho - padX * 2) / cols;
+            ed.ventanas.forEach(v => {
+                const wx = ex + padX + v.c * stepX;
+                const wy = topY + (ed.esTorreReloj ? 78 : 32) + v.r * 25;
+                if (wy > sueloY - 32) return;
+                ctx.fillStyle = v.encendida ? 'rgba(249, 115, 22, 0.72)' : '#09070c';
+                ctx.fillRect(wx, wy, stepX - 6, 15);
+            });
+
+            if (ed.enLlamas) {
+                const llamaR = 24 + Math.sin(ahora / 95 + ed.x) * 7;
+                const fx = ex + ed.ancho * 0.48;
+                ctx.fillStyle = 'rgba(234, 88, 12, 0.85)';
+                ctx.beginPath();
+                ctx.arc(fx, topY + 4, llamaR, 0, Math.PI * 2);
+                ctx.fill();
+
+                for (let s = 1; s <= 4; s++) {
+                    const drift = ((ahora / 22 + s * 32) % 140);
+                    ctx.fillStyle = `rgba(18, 16, 20, ${0.7 - s * 0.12})`;
+                    ctx.beginPath();
+                    ctx.arc(fx - drift * 0.45, topY - s * 30, 16 + s * 8, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        });
+
+        const parallaxCalle = camaraX_N5 * 0.72;
+        edificiosPrimerPlanoCiudadN5.forEach(edC => {
+            const sx = edC.x - parallaxCalle;
+            if (sx + edC.ancho < -120 || sx > w + 120) return;
+            const topY = sueloY - edC.alto;
+
+            ctx.fillStyle = '#18181b';
+            ctx.strokeStyle = '#3f3f46';
+            ctx.lineWidth = 2;
+            ctx.fillRect(sx, topY, edC.ancho, edC.alto);
+            ctx.strokeRect(sx, topY, edC.ancho, edC.alto);
+
+            ctx.fillStyle = '#27272a';
+            ctx.fillRect(sx - 6, topY, edC.ancho + 12, 16);
+            ctx.fillRect(sx - 4, topY + edC.alto * 0.45, edC.ancho + 8, 10);
+
+            if (edC.arcoEntrada) {
+                ctx.fillStyle = '#09090b';
+                ctx.beginPath();
+                ctx.arc(sx + edC.ancho / 2, sueloY - 45, 36, Math.PI, 0);
+                ctx.lineTo(sx + edC.ancho / 2 + 36, sueloY);
+                ctx.lineTo(sx + edC.ancho / 2 - 36, sueloY);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            for (let wy = topY + 34; wy < sueloY - 95; wy += 48) {
+                for (let wx = sx + 22; wx < sx + edC.ancho - 36; wx += 44) {
+                    ctx.fillStyle = ((wx + wy) % 3 === 0) ? 'rgba(234, 88, 12, 0.42)' : '#09090b';
+                    ctx.fillRect(wx, wy, 24, 32);
+                    ctx.strokeStyle = '#52525b';
+                    ctx.lineWidth = 1.2;
+                    ctx.strokeRect(wx, wy, 24, 32);
+                }
+            }
+        });
+
+        const parallaxAliados = camaraX_N5 * 0.82;
+        soldadosAliadosFondoN5.forEach(sol => {
+            const sx = sol.x - parallaxAliados;
+            const sy = sueloY - 34;
+            if (sx < -260 || sx > w + 120) return;
+
+            ctx.save();
+            ctx.fillStyle = '#44403c';
+            ctx.strokeStyle = '#1c1917';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.roundRect(sx + 14, sy + 14, 24, 10, 4);
+            ctx.roundRect(sx + 18, sy + 7, 18, 8, 4);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.translate(sx, sy);
+            ctx.fillStyle = '#1e293b';
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.arc(0, 8, 11, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#f97316';
+            ctx.fillRect(3, 5, 7, 3);
+
+            ctx.fillStyle = '#991b1b';
+            ctx.fillRect(2, 13, 20, 6);
+            ctx.fillStyle = '#eab308';
+            ctx.fillRect(8, 14, 7, 2);
+
+            const ciclo = (ahora + sol.cicloDisparo) % 900;
+            if (ciclo < 260) {
+                ctx.fillStyle = '#fef08a';
+                ctx.beginPath();
+                ctx.arc(25, 16, 6, 0, Math.PI * 2);
+                ctx.fill();
+
+                const progresoBala = ciclo / 260;
+                const distObjetivo = sol.monstruoObjetivoX - sol.x;
+                const bx = 25 + progresoBala * distObjetivo;
+                const by = 16 - progresoBala * 12;
+                ctx.fillStyle = '#fde047';
+                ctx.fillRect(bx, by, 12, 2.5);
+            }
+
+            const mx = sol.monstruoObjetivoX - sol.x;
+            const golpeMonstruo = (ciclo > 210 && ciclo < 260);
+            ctx.fillStyle = golpeMonstruo ? 'rgba(248, 113, 113, 0.7)' : 'rgba(46, 16, 68, 0.75)';
+            ctx.beginPath();
+            ctx.ellipse(mx, 10, 14, 18, -0.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = golpeMonstruo ? '#fca5a5' : '#581c87';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(mx - 8, 4);
+            ctx.lineTo(mx - 22, -4);
+            ctx.moveTo(mx - 8, 12);
+            ctx.lineTo(mx - 20, 16);
+            ctx.stroke();
+
+            ctx.restore();
+        });
+
+        ctx.fillStyle = '#fb923c';
+        chispasGuerraN5.forEach(ch => {
+            ch.x += ch.vx;
+            ch.y += ch.vy;
+            if (ch.x < 0) ch.x = w;
+            if (ch.y < 0) ch.y = sueloY;
+            ctx.fillRect(ch.x, ch.y, ch.tam, ch.tam);
+        });
+
+        if (camaraX_N5 < NIVEL5_FIN_PUENTE + 200) {
+            const rioGrad = ctx.createLinearGradient(0, sueloY + 26, 0, h);
+            rioGrad.addColorStop(0, '#1e1b24');
+            rioGrad.addColorStop(1, '#090b10');
+            ctx.fillStyle = rioGrad;
+            ctx.fillRect(0, sueloY + 26, Math.max(0, (NIVEL5_FIN_PUENTE - camaraX_N5)), h - (sueloY + 26));
+        }
+        const inicioSueloCiudadScreen = Math.max(0, NIVEL5_FIN_PUENTE - camaraX_N5);
+        if (inicioSueloCiudadScreen < w) {
+            ctx.fillStyle = '#0c0a0e';
+            ctx.fillRect(inicioSueloCiudadScreen, sueloY + 26, w - inicioSueloCiudadScreen, h - (sueloY + 26));
+        }
+    }
+
+    function dibujarPuenteYCochesN5(w, h, sueloY, ahora) {
+        tramosPuenteN5.forEach(tramo => {
+            const sx = tramo.x - camaraX_N5;
+            if (sx + tramo.ancho < -50 || sx > w + 50) return;
+
+            if (tramo.tipo === 'puente') {
+                ctx.fillStyle = '#1e293b';
+                for (let px = sx + 60; px < sx + tramo.ancho - 40; px += 240) {
+                    ctx.fillRect(px, sueloY + 24, 34, h - sueloY);
+                }
+
+                ctx.strokeStyle = '#475569';
+                ctx.lineWidth = 3;
+                for (let rx = sx + 15; rx < sx + tramo.ancho - 15; rx += 42) {
+                    ctx.beginPath();
+                    ctx.moveTo(rx, sueloY);
+                    ctx.lineTo(rx, sueloY - 22);
+                    ctx.lineTo(rx + 28, sueloY - 22);
+                    ctx.stroke();
+                }
+
+                ctx.fillStyle = '#334155';
+                ctx.fillRect(sx, sueloY, tramo.ancho, 26);
+
+                ctx.fillStyle = '#64748b';
+                ctx.fillRect(sx, sueloY, tramo.ancho, 6);
+                ctx.fillStyle = '#eab308';
+                for (let lx = sx + 20; lx < sx + tramo.ancho - 30; lx += 75) {
+                    ctx.fillRect(lx, sueloY + 13, 36, 3);
+                }
+            } else {
+                ctx.fillStyle = '#27272a';
+                ctx.fillRect(sx, sueloY, tramo.ancho, 28);
+
+                ctx.fillStyle = '#52525b';
+                ctx.fillRect(sx, sueloY, tramo.ancho, 7);
+
+                ctx.fillStyle = '#d4d4d8';
+                for (let lx = sx + 25; lx < sx + tramo.ancho - 30; lx += 90) {
+                    ctx.fillRect(lx, sueloY + 15, 42, 3);
+                }
+
+                ctx.strokeStyle = '#3f3f46';
+                ctx.lineWidth = 4;
+                for (let fx = sx + 120; fx < sx + tramo.ancho - 80; fx += 340) {
+                    ctx.beginPath();
+                    ctx.moveTo(fx, sueloY);
+                    ctx.lineTo(fx, sueloY - 68);
+                    ctx.lineTo(fx + 22, sueloY - 76);
+                    ctx.stroke();
+                }
+            }
+        });
+
+        cochesDestruidosN5.forEach(coche => {
+            const cx = coche.x - camaraX_N5;
+            const cy = sueloY - coche.alto;
+            if (cx + coche.ancho < -60 || cx > w + 60) return;
+
+            ctx.save();
+            ctx.fillStyle = coche.tipo === 'tanqueta' ? '#3f6212' : (coche.tipo === 'camion' ? '#7f1d1d' : '#475569');
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 2;
+
+            ctx.beginPath();
+            ctx.roundRect(cx, cy + coche.alto * 0.42, coche.ancho, coche.alto * 0.45, 5);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(cx + coche.ancho * 0.18, cy + coche.alto * 0.42);
+            ctx.lineTo(cx + coche.ancho * 0.28, cy);
+            ctx.lineTo(cx + coche.ancho * 0.72, cy + 4);
+            ctx.lineTo(cx + coche.ancho * 0.84, cy + coche.alto * 0.42);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#090d16';
+            ctx.fillRect(cx + coche.ancho * 0.32, cy + 7, coche.ancho * 0.18, coche.alto * 0.26);
+            ctx.fillRect(cx + coche.ancho * 0.54, cy + 8, coche.ancho * 0.18, coche.alto * 0.25);
+
+            [cx + coche.ancho * 0.22, cx + coche.ancho * 0.78].forEach(wx => {
+                ctx.fillStyle = '#09090b';
+                ctx.beginPath();
+                ctx.arc(wx, sueloY - 9, 11, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#64748b';
+                ctx.beginPath();
+                ctx.arc(wx, sueloY - 9, 4, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            if (coche.enLlamas) {
+                const pulso = Math.sin(ahora / 90 + coche.x) * 4;
+                ctx.fillStyle = '#f97316';
+                ctx.beginPath();
+                ctx.arc(cx + coche.ancho * 0.82, cy + coche.alto * 0.35, 13 + pulso, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#fde047';
+                ctx.beginPath();
+                ctx.arc(cx + coche.ancho * 0.82, cy + coche.alto * 0.38, 7, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        });
+    }
+
+    function dibujarEnemigoTiranidoN5(en, ahora, esTopDown = false) {
+        const sx = esTopDown ? en.x : (en.x - camaraX_N5);
+        const sy = en.y;
+        const tam = en.tam;
+        const golpeado = ahora < en.flashHasta;
+        const paso = Math.sin(ahora / 85 + en.pasoAnim) * 5;
+        const dir = en.vx <= 0 ? -1 : 1;
+
+        ctx.save();
+        ctx.translate(sx + tam / 2, sy + tam / 2);
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+        ctx.beginPath();
+        ctx.ellipse(0, tam * 0.48, tam * 0.42, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.scale(-dir, 1);
+
+        ctx.strokeStyle = golpeado ? '#ffffff' : '#581c87';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(tam * 0.18, tam * 0.12);
+        ctx.quadraticCurveTo(tam * 0.48, tam * 0.02 + paso * 0.5, tam * 0.54, -tam * 0.16);
+        ctx.stroke();
+
+        [-1, 1].forEach((lado, idx) => {
+            const pOff = idx === 0 ? paso : -paso;
+            ctx.strokeStyle = golpeado ? '#ffffff' : '#e9d5ff';
+            ctx.lineWidth = 5.5;
+            ctx.beginPath();
+            ctx.moveTo(lado * 6, tam * 0.08);
+            ctx.lineTo(lado * 12 + pOff, tam * 0.28);
+            ctx.lineTo(lado * 8 - pOff * 0.5, tam * 0.47);
+            ctx.stroke();
+
+            ctx.fillStyle = '#090d16';
+            ctx.beginPath();
+            ctx.moveTo(lado * 8 - pOff * 0.5, tam * 0.47);
+            ctx.lineTo(lado * 8 - pOff * 0.5 - 8, tam * 0.49);
+            ctx.lineTo(lado * 8 - pOff * 0.5 - 2, tam * 0.42);
+            ctx.closePath();
+            ctx.fill();
+        });
+
+        ctx.fillStyle = golpeado ? '#ffffff' : '#f3e8ff';
+        ctx.strokeStyle = '#581c87';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.ellipse(-2, 0, tam * 0.28, tam * 0.30, -0.35, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = golpeado ? '#ffffff' : (en.esLanzadorAcido ? '#15803d' : '#581c87');
+        ctx.strokeStyle = en.esLanzadorAcido ? '#84cc16' : '#3b0764';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(-tam * 0.18, -tam * 0.26);
+        ctx.quadraticCurveTo(tam * 0.25, -tam * 0.44, tam * 0.34, tam * 0.05);
+        ctx.lineTo(tam * 0.05, tam * 0.08);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        if (en.esLanzadorAcido && !golpeado) {
+            const pulsoAcido = Math.sin(ahora / 120) * 1.5;
+            ctx.fillStyle = '#a3e635';
+            ctx.beginPath();
+            ctx.arc(tam * 0.12, -tam * 0.24, 5 + pulsoAcido, 0, Math.PI * 2);
+            ctx.arc(tam * 0.22, -tam * 0.12, 4 + pulsoAcido, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        const brazos = [
+            { x1: -8, y1: -8, x2: -tam * 0.34, y2: -tam * 0.22 + paso, x3: -tam * 0.56, y3: -tam * 0.06 + paso },
+            { x1: -6, y1: 2,  x2: -tam * 0.32, y2: tam * 0.14 - paso,  x3: -tam * 0.54, y3: tam * 0.24 - paso },
+            { x1: 6,  y1: -6, x2: -tam * 0.16, y2: -tam * 0.18 - paso, x3: -tam * 0.42, y3: -tam * 0.12 - paso },
+            { x1: 8,  y1: 4,  x2: -tam * 0.14, y2: tam * 0.18 + paso,  x3: -tam * 0.38, y3: tam * 0.28 + paso }
+        ];
+        brazos.forEach(b => {
+            ctx.strokeStyle = golpeado ? '#ffffff' : '#e9d5ff';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(b.x1, b.y1);
+            ctx.lineTo(b.x2, b.y2);
+            ctx.lineTo(b.x3, b.y3);
+            ctx.stroke();
+
+            ctx.fillStyle = en.esLanzadorAcido ? '#65a30d' : '#dc2626';
+            ctx.beginPath();
+            ctx.moveTo(b.x3, b.y3 - 2);
+            ctx.quadraticCurveTo(b.x3 - 10, b.y3 - 6, b.x3 - 13, b.y3 + 4);
+            ctx.lineTo(b.x3 - 3, b.y3 + 3);
+            ctx.closePath();
+            ctx.fill();
+        });
+
+        ctx.fillStyle = golpeado ? '#ffffff' : '#f3e8ff';
+        ctx.strokeStyle = '#581c87';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.ellipse(-tam * 0.22, -tam * 0.16, 13, 9, -0.25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = en.esLanzadorAcido ? '#a3e635' : '#facc15';
+        ctx.beginPath();
+        ctx.ellipse(-tam * 0.28, -tam * 0.18, 3.2, 1.8, -0.3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = en.esLanzadorAcido ? '#84cc16' : '#be123c';
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.moveTo(-tam * 0.34, -tam * 0.11);
+        ctx.quadraticCurveTo(-tam * 0.46, -tam * 0.02, -tam * 0.42, tam * 0.12);
+        ctx.stroke();
+
+        if (en.vida < en.vidaMax) {
+            ctx.scale(-dir, 1);
+            ctx.fillStyle = 'rgba(0,0,0,0.75)';
+            ctx.fillRect(-18, -tam * 0.62, 36, 4);
+            ctx.fillStyle = en.esLanzadorAcido ? '#84cc16' : '#ef4444';
+            ctx.fillRect(-18, -tam * 0.62, 36 * (en.vida / en.vidaMax), 4);
+        }
+
+        ctx.restore();
+    }
+
+    function dibujarGuardianEliteN5(g, ahora) {
+        const sx = g.x - camaraX_N5;
+        const sy = g.y;
+        const W = g.ancho;
+        const H = g.alto;
+        const golpeado = ahora < g.flashHasta;
+        const dir = g.vx <= 0 ? -1 : 1;
+
+        let anguloBrazoPrincipal = 0.15;
+        let anguloBrazoSecundario = -0.25;
+        let mostrarEstelaTajo = false;
+        let paso = Math.sin(ahora / 120 + g.pasoAnim) * 5;
+        let inclinacionCuerpo = 0;
+
+        if (g.estadoAtaque === 'preparando') {
+            const prog = Math.min(1, (ahora - g.inicioAtaque) / 420);
+            anguloBrazoPrincipal = 0.15 + prog * 1.55;
+            anguloBrazoSecundario = -0.25 + prog * 1.05;
+            inclinacionCuerpo = -0.10 * prog;
+            paso = 0;
+        } else if (g.estadoAtaque === 'tajando') {
+            const prog = Math.min(1, (ahora - g.inicioAtaque) / 240);
+            anguloBrazoPrincipal = 1.70 - prog * 2.65;
+            anguloBrazoSecundario = 0.80 - prog * 1.55;
+            inclinacionCuerpo = 0.14 * prog;
+            mostrarEstelaTajo = true;
+            paso = 0;
+        } else if (g.estadoAtaque === 'recuperando') {
+            const prog = Math.min(1, (ahora - g.inicioAtaque) / 380);
+            anguloBrazoPrincipal = -0.95 + prog * 1.1;
+            anguloBrazoSecundario = -0.75 + prog * 0.5;
+            inclinacionCuerpo = 0.14 * (1 - prog);
+            paso = 0;
+        }
+
+        ctx.save();
+        ctx.translate(sx + W / 2, sy + H / 2);
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';
+        ctx.beginPath();
+        ctx.ellipse(0, H * 0.49, W * 0.52, 9, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(10, 5, 18, 0.88)';
+        ctx.fillRect(-38, -H * 0.60, 76, 6);
+        ctx.fillStyle = '#c026d3';
+        ctx.fillRect(-38, -H * 0.60, 76 * (g.vida / g.vidaMax), 6);
+        ctx.strokeStyle = '#f5d0fe';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(-38, -H * 0.60, 76, 6);
+
+        ctx.scale(-dir, 1);
+        ctx.rotate(-inclinacionCuerpo);
+
+        ctx.fillStyle = golpeado ? '#ffffff' : '#d8b4fe';
+        ctx.strokeStyle = '#2e1065';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(W * 0.15, H * 0.22);
+        ctx.lineTo(W * 0.42, H * 0.32);
+        ctx.lineTo(W * 0.62, H * 0.18);
+        ctx.lineTo(W * 0.44, H * 0.20);
+        ctx.lineTo(W * 0.18, H * 0.10);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = golpeado ? '#ffffff' : '#7f1d1d';
+        ctx.beginPath();
+        ctx.moveTo(W * 0.56, H * 0.20);
+        ctx.lineTo(W * 0.70, H * 0.12);
+        ctx.lineTo(W * 0.60, H * 0.24);
+        ctx.closePath();
+        ctx.fill();
+
+        [-1, 1].forEach((lado, idx) => {
+            const pOff = idx === 0 ? paso : -paso;
+            const hipX = lado * 12;
+            const hipY = H * 0.12;
+            const kneeX = lado * 22 + pOff;
+            const kneeY = H * 0.28;
+            const ankleX = lado * 8 + pOff * 0.4;
+            const ankleY = H * 0.38;
+            const footX = lado * 14 - pOff * 0.4;
+            const footY = H * 0.48;
+
+            ctx.strokeStyle = golpeado ? '#ffffff' : '#e9d5ff';
+            ctx.lineWidth = 9;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ctx.moveTo(hipX, hipY);
+            ctx.lineTo(kneeX, kneeY);
+            ctx.lineTo(ankleX, ankleY);
+            ctx.lineTo(footX, footY);
+            ctx.stroke();
+
+            ctx.fillStyle = golpeado ? '#ffffff' : '#3b0764';
+            ctx.strokeStyle = '#6b21a8';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(hipX - 6, hipY);
+            ctx.lineTo(kneeX + 8, kneeY - 4);
+            ctx.lineTo(kneeX + 2, kneeY + 10);
+            ctx.lineTo(hipX - 10, hipY + 8);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#7f1d1d';
+            ctx.beginPath();
+            ctx.moveTo(footX, footY);
+            ctx.lineTo(footX - 15, footY + 1);
+            ctx.lineTo(footX - 5, footY - 6);
+            ctx.closePath();
+            ctx.fill();
+        });
+
+        const torsoGrad = ctx.createLinearGradient(-W * 0.28, -H * 0.15, W * 0.22, H * 0.22);
+        torsoGrad.addColorStop(0, golpeado ? '#ffffff' : '#f3e8ff');
+        torsoGrad.addColorStop(0.6, golpeado ? '#ffffff' : '#c4b5fd');
+        torsoGrad.addColorStop(1, golpeado ? '#ffffff' : '#581c87');
+        ctx.fillStyle = torsoGrad;
+        ctx.strokeStyle = '#2e1065';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-W * 0.26, -H * 0.16);
+        ctx.lineTo(W * 0.18, -H * 0.20);
+        ctx.lineTo(W * 0.24, H * 0.08);
+        ctx.lineTo(W * 0.06, H * 0.24);
+        ctx.lineTo(-W * 0.14, H * 0.22);
+        ctx.lineTo(-W * 0.28, H * 0.02);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.strokeStyle = '#6b21a8';
+        ctx.lineWidth = 2;
+        for (let r = -6; r <= 12; r += 6) {
+            ctx.beginPath();
+            ctx.moveTo(-W * 0.24, r);
+            ctx.lineTo(-W * 0.06, r + 4);
+            ctx.lineTo(W * 0.08, r + 1);
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = golpeado ? '#ffffff' : '#1e1b4b';
+        ctx.strokeStyle = '#581c87';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-W * 0.04, -H * 0.34);
+        ctx.lineTo(W * 0.38, -H * 0.46);
+        ctx.lineTo(W * 0.48, -H * 0.14);
+        ctx.lineTo(W * 0.26, -H * 0.02);
+        ctx.lineTo(0, -H * 0.14);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        const capGrad = ctx.createLinearGradient(-W * 0.32, -H * 0.46, W * 0.26, -H * 0.04);
+        capGrad.addColorStop(0, golpeado ? '#ffffff' : '#581c87');
+        capGrad.addColorStop(0.55, golpeado ? '#ffffff' : '#3b0764');
+        capGrad.addColorStop(1, golpeado ? '#ffffff' : '#0f172a');
+        ctx.fillStyle = capGrad;
+        ctx.strokeStyle = '#7e22ce';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-W * 0.36, -H * 0.26);
+        ctx.lineTo(-W * 0.18, -H * 0.44);
+        ctx.lineTo(W * 0.16, -H * 0.42);
+        ctx.lineTo(W * 0.32, -H * 0.16);
+        ctx.lineTo(W * 0.08, -H * 0.04);
+        ctx.lineTo(-W * 0.22, -H * 0.12);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        if (!golpeado) {
+            ctx.strokeStyle = '#f97316';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(W * 0.12, -H * 0.28);
+            ctx.lineTo(W * 0.24, -H * 0.22);
+            ctx.moveTo(W * 0.18, -H * 0.31);
+            ctx.lineTo(W * 0.20, -H * 0.18);
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = golpeado ? '#ffffff' : '#3b0764';
+        ctx.strokeStyle = '#1e1b4b';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(-W * 0.38, -H * 0.14);
+        ctx.lineTo(-W * 0.26, -H * 0.25);
+        ctx.lineTo(-W * 0.12, -H * 0.20);
+        ctx.lineTo(-W * 0.16, -H * 0.06);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath();
+        ctx.moveTo(-W * 0.33, -H * 0.15);
+        ctx.lineTo(-W * 0.24, -H * 0.17);
+        ctx.lineTo(-W * 0.26, -H * 0.13);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#450a0a';
+        ctx.beginPath();
+        ctx.moveTo(-W * 0.37, -H * 0.11);
+        ctx.lineTo(-W * 0.20, -H * 0.10);
+        ctx.lineTo(-W * 0.22, -H * 0.01);
+        ctx.lineTo(-W * 0.35, -H * 0.02);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#fefce8';
+        for (let tx = 0; tx < 13; tx += 3.2) {
+            ctx.beginPath();
+            ctx.moveTo(-W * 0.36 + tx, -H * 0.11);
+            ctx.lineTo(-W * 0.345 + tx, -H * 0.06);
+            ctx.lineTo(-W * 0.33 + tx, -H * 0.11);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(-W * 0.35 + tx, -H * 0.02);
+            ctx.lineTo(-W * 0.335 + tx, -H * 0.06);
+            ctx.lineTo(-W * 0.32 + tx, -H * 0.02);
+            ctx.fill();
+        }
+
+        ctx.save();
+        ctx.translate(-W * 0.14, -H * 0.02);
+        ctx.rotate(anguloBrazoSecundario);
+
+        ctx.fillStyle = golpeado ? '#ffffff' : '#ede9fe';
+        ctx.strokeStyle = '#3b0764';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.roundRect(-28, -6, 30, 12, 4);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = golpeado ? '#ffffff' : '#881337';
+        ctx.strokeStyle = '#fda4af';
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.moveTo(-24, -6);
+        ctx.lineTo(-64, 4);
+        ctx.lineTo(-52, 14);
+        ctx.lineTo(-44, 9);
+        ctx.lineTo(-36, 12);
+        ctx.lineTo(-24, 6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(-W * 0.02, -H * 0.08);
+        ctx.rotate(anguloBrazoPrincipal);
+
+        ctx.fillStyle = golpeado ? '#ffffff' : '#f5f3ff';
+        ctx.strokeStyle = '#2e1065';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(-34, -8, 38, 16, 4);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = golpeado ? '#ffffff' : '#4c1d95';
+        ctx.beginPath();
+        ctx.moveTo(-28, -9);
+        ctx.lineTo(-8, -11);
+        ctx.lineTo(-6, -3);
+        ctx.lineTo(-26, -3);
+        ctx.closePath();
+        ctx.fill();
+
+        const bladeGrad = ctx.createLinearGradient(-28, 0, -84, 16);
+        bladeGrad.addColorStop(0, golpeado ? '#ffffff' : '#450a0a');
+        bladeGrad.addColorStop(0.5, golpeado ? '#ffffff' : '#9f1239');
+        bladeGrad.addColorStop(1, golpeado ? '#ffffff' : '#f43f5e');
+        ctx.fillStyle = bladeGrad;
+        ctx.strokeStyle = '#fecdd3';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(-30, -8);
+        ctx.quadraticCurveTo(-64, -18, -84, 16);
+        ctx.lineTo(-68, 11);
+        ctx.lineTo(-63, 16);
+        ctx.lineTo(-52, 9);
+        ctx.lineTo(-47, 14);
+        ctx.lineTo(-38, 8);
+        ctx.lineTo(-30, 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        if (mostrarEstelaTajo) {
+            ctx.strokeStyle = 'rgba(244, 63, 94, 0.9)';
+            ctx.lineWidth = 7;
+            ctx.beginPath();
+            ctx.arc(-20, 0, 68, -Math.PI * 0.70, -Math.PI * 0.12);
+            ctx.stroke();
+        }
+        ctx.restore();
+
+        ctx.restore();
+    }
+
+    function haySueloEnX_N5(xPos, anchoObj) {
+        return tramosPuenteN5.some(t => (xPos + anchoObj * 0.7 > t.x) && (xPos + anchoObj * 0.3 < t.x + t.ancho));
+    }
+
+    // ============================================================
+    // 10. BUCLE DE BATALLA DEL JEFE FINAL EN VISTA AÉREA (TOP-DOWN)
+    // ============================================================
+    function actualizarYRenderizarArenaTopDownN5(w, h, ahora) {
+        dibujarArenaCiudadTopDownN5(w, h, ahora);
+
+        const borde = 64;
+        const jugCx = playerN5.x + jugador.tam / 2;
+        const jugCy = playerN5.y + jugador.tam / 2;
+
+        // Destello dorado de regeneración total de corazones al empezar la batalla
+        if (ahora < destelloCuracionHastaN5) {
+            const alfaCura = (destelloCuracionHastaN5 - ahora) / 1400;
+            ctx.save();
+            ctx.strokeStyle = `rgba(250, 204, 21, ${alfaCura})`;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(jugCx, jugCy, 34 + (1 - alfaCura) * 45, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.font = 'bold 14px "Courier New", monospace';
+            ctx.fillStyle = `rgba(253, 224, 71, ${alfaCura})`;
+            ctx.textAlign = 'center';
+            ctx.fillText('+ VIDA RESTAURADA AL MÁXIMO', jugCx, jugCy - 38);
+            ctx.restore();
+        }
+
+        // --- FASE DE EXPLOSIÓN DEL JEFE + CINEMÁTICA CON SOLDADOS ALIADOS -> NIVEL 6 ---
+        if (explosionJefeN5 || (cinematicaAliadosN5 && cinematicaAliadosN5.activa)) {
+            // 1. Renderizar explosión masiva del Jefe Final
+            if (explosionJefeN5) {
+                const tExp = (ahora - explosionJefeN5.inicio) / explosionJefeN5.duracion;
+                if (tExp <= 1) {
+                    // Onda expansiva doble
+                    ctx.save();
+                    ctx.strokeStyle = `rgba(244, 63, 94, ${1 - tExp})`;
+                    ctx.lineWidth = 10 * (1 - tExp) + 2;
+                    ctx.beginPath();
+                    ctx.arc(explosionJefeN5.x, explosionJefeN5.y, tExp * 260, 0, Math.PI * 2);
+                    ctx.stroke();
+
+                    ctx.strokeStyle = `rgba(250, 204, 21, ${1 - tExp})`;
+                    ctx.lineWidth = 6 * (1 - tExp) + 1;
+                    ctx.beginPath();
+                    ctx.arc(explosionJefeN5.x, explosionJefeN5.y, tExp * 170, 0, Math.PI * 2);
+                    ctx.stroke();
+
+                    // Núcleo brillante
+                    if (tExp < 0.45) {
+                        const rNuc = (1 - tExp / 0.45) * 95;
+                        const nucGrad = ctx.createRadialGradient(explosionJefeN5.x, explosionJefeN5.y, 4, explosionJefeN5.x, explosionJefeN5.y, rNuc);
+                        nucGrad.addColorStop(0, '#ffffff');
+                        nucGrad.addColorStop(0.5, '#facc15');
+                        nucGrad.addColorStop(1, 'rgba(244, 63, 94, 0)');
+                        ctx.fillStyle = nucGrad;
+                        ctx.beginPath();
+                        ctx.arc(explosionJefeN5.x, explosionJefeN5.y, rNuc, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+
+                    // Fragmentos volando por toda la plaza
+                    explosionJefeN5.fragmentos.forEach(fr => {
+                        fr.x += fr.vx;
+                        fr.y += fr.vy;
+                        fr.vx *= 0.96;
+                        fr.vy *= 0.96;
+                        ctx.fillStyle = fr.color;
+                        ctx.globalAlpha = Math.max(0, 1 - tExp);
+                        ctx.beginPath();
+                        ctx.arc(fr.x, fr.y, fr.radio, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+                    ctx.restore();
+                } else {
+                    explosionJefeN5 = null;
+                    if (cinematicaAliadosN5 && !cinematicaAliadosN5.activa) {
+                        cinematicaAliadosN5.activa = true;
+                        cinematicaAliadosN5.inicio = ahora;
+                        document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 5 — REAGRUPANDO CON LOS SOLDADOS ALIADOS...';
+                    }
+                }
+            }
+
+            // 2. Cinemática donde el jugador camina hacia los Soldados Aliados y pasa al Nivel 6
+            if (cinematicaAliadosN5 && cinematicaAliadosN5.activa) {
+                let aliadosEnPosicion = true;
+                cinematicaAliadosN5.aliados.forEach(al => {
+                    const dxA = al.destX - al.x;
+                    const dyA = al.destY - al.y;
+                    const distA = Math.hypot(dxA, dyA);
+                    if (distA > 4) {
+                        aliadosEnPosicion = false;
+                        al.x += (dxA / distA) * 5.2;
+                        al.y += (dyA / distA) * 5.2;
+                    }
+                });
+
+                // Mover automáticamente al jugador hacia el comandante aliado
+                const destinoJugX = w * 0.62 - jugador.tam / 2;
+                const destinoJugY = h * 0.50 - jugador.tam / 2;
+                const dxJ = destinoJugX - playerN5.x;
+                const dyJ = destinoJugY - playerN5.y;
+                const distJ = Math.hypot(dxJ, dyJ);
+
+                if (distJ > 5) {
+                    playerN5.x += (dxJ / distJ) * 4.5;
+                    playerN5.y += (dyJ / distJ) * 4.5;
+                    estadoMarineP2.anguloTopDown = Math.atan2(dyJ, dxJ);
+                } else {
+                    estadoMarineP2.anguloTopDown = 0;
+                    if (cinematicaAliadosN5.reunidoEn === 0) {
+                        cinematicaAliadosN5.reunidoEn = ahora;
+                        textoContador = '¡NIVEL 5 COMPLETADO!';
+                    }
+                }
+
+                const celebrando = (cinematicaAliadosN5.reunidoEn > 0);
+                cinematicaAliadosN5.aliados.forEach(al => dibujarSoldadoAliadoTopDownN5(al, ahora, celebrando));
+
+                if (celebrando) {
+                    ctx.save();
+                    ctx.font = 'bold 16px "Courier New", monospace';
+                    ctx.fillStyle = '#38bdf8';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('¡REFUERZOS ALIADOS: "BUEN TRABAJO, HERMANO. AVANCEMOS AL SECTOR 6"!', w / 2, h * 0.22);
+                    ctx.restore();
+
+                    // Tras 2.4 segundos con los aliados, iniciar automáticamente el Nivel 6
+                    if (!cinematicaAliadosN5.transicionIniciada && ahora - cinematicaAliadosN5.reunidoEn >= 2400) {
+                        cinematicaAliadosN5.transicionIniciada = true;
+                        textoContador = '';
+                        if (typeof abrirNivel === 'function') {
+                            abrirNivel(6, modoExtremo);
+                        }
+                        return;
+                    }
+                }
+            }
+
+            dibujarJugadorMarineP2(playerN5.x, playerN5.y, ahora, true);
+
+            if (textoContador !== '') {
+                ctx.font = 'bold 46px "Courier New", monospace';
+                ctx.fillStyle = '#ffd60a';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(textoContador, w / 2, h * 0.32);
+            }
+            return;
+        }
+
+        // 1. Movimiento libre del jugador en 8 direcciones por todo el mapa de la plaza
+        if (puedeMoverse && jugador.vidas > 0) {
+            let mx = 0;
+            let my = 0;
+            if (teclas.ArrowLeft || teclasExtraP2.KeyA) mx -= 1;
+            if (teclas.ArrowRight || teclasExtraP2.KeyD) mx += 1;
+            if (teclas.ArrowUp || teclasExtraP2.KeyW) my -= 1;
+            if (teclas.ArrowDown || teclasExtraP2.KeyS) my += 1;
+
+            if (mx !== 0 || my !== 0) {
+                const norm = Math.hypot(mx, my);
+                mx /= norm;
+                my /= norm;
+                playerN5.x += mx * 6.5;
+                playerN5.y += my * 6.5;
+            }
+
+            playerN5.x = Math.max(borde, Math.min(w - borde - jugador.tam, playerN5.x));
+            playerN5.y = Math.max(borde, Math.min(h - borde - jugador.tam, playerN5.y));
+        }
+
+        const nuevoJugCx = playerN5.x + jugador.tam / 2;
+        const nuevoJugCy = playerN5.y + jugador.tam / 2;
+
+        // 2. AUTO-APUNTADO INTELIGENTE:
+        //    Apunta al enemigo normal más cercano si hay alguno más cerca que el jefe;
+        //    de lo contrario apunta directo al Jefe Final.
+        let objetivoX = null;
+        let objetivoY = null;
+        let distanciaMinima = Infinity;
+
+        if (jefeFinalN5 && !jefeFinalN5.muerto) {
+            const distJefe = Math.hypot(jefeFinalN5.x - nuevoJugCx, jefeFinalN5.y - nuevoJugCy);
+            distanciaMinima = distJefe;
+            objetivoX = jefeFinalN5.x;
+            objetivoY = jefeFinalN5.y;
+        }
+
+        minionsTopDownN5.forEach(en => {
+            const ex = en.x + en.tam / 2;
+            const ey = en.y + en.tam / 2;
+            const distEn = Math.hypot(ex - nuevoJugCx, ey - nuevoJugCy);
+            if (distEn < distanciaMinima) {
+                distanciaMinima = distEn;
+                objetivoX = ex;
+                objetivoY = ey;
+            }
+        });
+
+        if (objetivoX !== null && objetivoY !== null) {
+            estadoMarineP2.anguloTopDown = Math.atan2(objetivoY - nuevoJugCy, objetivoX - nuevoJugCx);
+        }
+
+        // 3. Disparo continuo directo al objetivo fijado
+        if (puedeMoverse && jugador.vidas > 0) {
+            if (estadoMarineP2.disparando && !estadoMarineP2.escudoActivo && ahora - estadoMarineP2.ultimoDisparo >= 105) {
+                estadoMarineP2.ultimoDisparo = ahora;
+                const ang = estadoMarineP2.anguloTopDown;
+                estadoMarineP2.balas.push({
+                    x: nuevoJugCx + Math.cos(ang) * 28,
+                    y: nuevoJugCy + Math.sin(ang) * 28,
+                    vx: Math.cos(ang) * 18.5,
+                    vy: Math.sin(ang) * 18.5,
+                    danio: 10
+                });
+            }
+
+            // Refuerzos periódicos de Tiránidos normales para ayudar al jefe
+            if (jefeFinalN5 && !jefeFinalN5.muerto && minionsTopDownN5.length < 4 && ahora - ultimoSpawnMinionTopDownN5 >= 5200) {
+                ultimoSpawnMinionTopDownN5 = ahora;
+                const lado = Math.floor(Math.random() * 4);
+                let sx = w / 2, sy = h / 2;
+                if (lado === 0) { sx = borde + 10; sy = borde + Math.random() * (h - borde * 2 - 60); }
+                else if (lado === 1) { sx = w - borde - 70; sy = borde + Math.random() * (h - borde * 2 - 60); }
+                else if (lado === 2) { sx = borde + Math.random() * (w - borde * 2 - 60); sy = borde + 10; }
+                else { sx = borde + Math.random() * (w - borde * 2 - 60); sy = h - borde - 70; }
+                minionsTopDownN5.push(crearEnemigoTiranidoN5(sx, sy, true));
+            }
+        }
+
+        // 4. Charcos de ácido en el pavimento de la plaza
+        charcosAcidoTopDownN5 = charcosAcidoTopDownN5.filter(ch => {
+            if (ahora >= ch.expiraEn) return false;
+            ctx.fillStyle = 'rgba(132, 204, 22, 0.55)';
+            ctx.beginPath();
+            ctx.arc(ch.x, ch.y, ch.radio, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#a3e635';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            if (Math.hypot(nuevoJugCx - ch.x, nuevoJugCy - ch.y) < ch.radio + jugador.tam * 0.35) {
+                if (!estadoMarineP2.escudoActivo) {
+                    recibirDanioJugadorNivel5(1, false);
+                }
+            }
+            return true;
+        });
+
+        // 5. Avisos de lluvia de 10 ácidos (avisan 2 segundos antes de caer)
+        avisosAcidoTopDownN5 = avisosAcidoTopDownN5.filter(av => {
+            const transcurrido = ahora - av.creadoEn;
+            const progreso = Math.min(1, transcurrido / 2000);
+
+            if (progreso < 1) {
+                ctx.save();
+                ctx.strokeStyle = '#a3e635';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.arc(av.x, av.y, av.radio, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.fillStyle = `rgba(163, 230, 53, ${0.15 + progreso * 0.35})`;
+                ctx.beginPath();
+                ctx.arc(av.x, av.y, av.radio * progreso, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+                return true;
+            } else {
+                if (Math.hypot(nuevoJugCx - av.x, nuevoJugCy - av.y) <= av.radio + jugador.tam * 0.4) {
+                    recibirDanioJugadorNivel5(1, true);
+                }
+                charcosAcidoTopDownN5.push({
+                    x: av.x,
+                    y: av.y,
+                    radio: av.radio * 0.85,
+                    expiraEn: ahora + 2600
+                });
+                return false;
+            }
+        });
+
+        // 6. IA y Ataques Aleatorios del Jefe Final (3000 HP, 3x jugador, muy rápido)
+        if (jefeFinalN5 && !jefeFinalN5.muerto) {
+            if (puedeMoverse && jugador.vidas > 0) {
+                const dx = nuevoJugCx - jefeFinalN5.x;
+                const dy = nuevoJugCy - jefeFinalN5.y;
+                const dist = Math.hypot(dx, dy) || 1;
+
+                if (jefeFinalN5.estado === 'acechando') {
+                    jefeFinalN5.angulo = Math.atan2(dy, dx);
+                    jefeFinalN5.x += (dx / dist) * 5.6;
+                    jefeFinalN5.y += (dy / dist) * 5.6;
+
+                    if (ahora >= jefeFinalN5.proximoAtaqueEn) {
+                        const eleccion = Math.random();
+                        if (eleccion < 0.38) {
+                            // ATAQUE 1: EMBESTIDA RELÁMPAGO CON 4 CUCHILLAS (Avisa 1 segundo antes)
+                            jefeFinalN5.estado = 'aviso_embestida';
+                            jefeFinalN5.inicioEstado = ahora;
+                            jefeFinalN5.embestidaOrigenX = jefeFinalN5.x;
+                            jefeFinalN5.embestidaOrigenY = jefeFinalN5.y;
+                            const angEmb = Math.atan2(dy, dx);
+                            jefeFinalN5.angulo = angEmb;
+                            const distEmb = Math.min(540, Math.max(320, dist + 140));
+                            jefeFinalN5.embestidaDestinoX = Math.max(borde + 55, Math.min(w - borde - 55, jefeFinalN5.x + Math.cos(angEmb) * distEmb));
+                            jefeFinalN5.embestidaDestinoY = Math.max(borde + 55, Math.min(h - borde - 55, jefeFinalN5.y + Math.sin(angEmb) * distEmb));
+                            jefeFinalN5.embestidaGolpeo = false;
+                        } else if (eleccion < 0.70) {
+                            // ATAQUE 2: LLUVIA DE 10 ÁCIDOS ALEATORIOS POR TODO EL MAPA (Avisa 2 segundos antes)
+                            jefeFinalN5.estado = 'aviso_acido';
+                            jefeFinalN5.inicioEstado = ahora;
+                            for (let k = 0; k < 10; k++) {
+                                avisosAcidoTopDownN5.push({
+                                    x: borde + 45 + Math.random() * (w - borde * 2 - 90),
+                                    y: borde + 45 + Math.random() * (h - borde * 2 - 90),
+                                    radio: 44,
+                                    creadoEn: ahora
+                                });
+                            }
+                        } else {
+                            // ATAQUE 3: BARRIDO DE COLA EN LÍNEA CURVA DE GRAN ALCANCE (Avisa 1 segundo antes)
+                            jefeFinalN5.estado = 'aviso_cola';
+                            jefeFinalN5.inicioEstado = ahora;
+                            jefeFinalN5.colaAnguloCentro = Math.atan2(dy, dx);
+                            jefeFinalN5.angulo = jefeFinalN5.colaAnguloCentro;
+                            jefeFinalN5.colaGolpeo = false;
+                        }
+                    }
+                } else if (jefeFinalN5.estado === 'aviso_embestida') {
+                    if (ahora - jefeFinalN5.inicioEstado >= 1000) {
+                        jefeFinalN5.estado = 'embistiendo';
+                        jefeFinalN5.inicioEstado = ahora;
+                    }
+                } else if (jefeFinalN5.estado === 'embistiendo') {
+                    const tEmb = Math.min(1, (ahora - jefeFinalN5.inicioEstado) / 260);
+                    jefeFinalN5.x = jefeFinalN5.embestidaOrigenX + (jefeFinalN5.embestidaDestinoX - jefeFinalN5.embestidaOrigenX) * tEmb;
+                    jefeFinalN5.y = jefeFinalN5.embestidaOrigenY + (jefeFinalN5.embestidaDestinoY - jefeFinalN5.embestidaOrigenY) * tEmb;
+
+                    if (!jefeFinalN5.embestidaGolpeo && Math.hypot(nuevoJugCx - jefeFinalN5.x, nuevoJugCy - jefeFinalN5.y) <= jefeFinalN5.radio + jugador.tam * 0.45) {
+                        jefeFinalN5.embestidaGolpeo = true;
+                        recibirDanioJugadorNivel5(2, true);
+                    }
+
+                    if (tEmb >= 1) {
+                        jefeFinalN5.estado = 'recuperando';
+                        jefeFinalN5.inicioEstado = ahora;
+                        jefeFinalN5.proximoAtaqueEn = ahora + 850;
+                    }
+                } else if (jefeFinalN5.estado === 'aviso_acido') {
+                    if (ahora - jefeFinalN5.inicioEstado >= 450) {
+                        jefeFinalN5.estado = 'acechando';
+                        jefeFinalN5.proximoAtaqueEn = ahora + 1400;
+                    }
+                } else if (jefeFinalN5.estado === 'aviso_cola') {
+                    if (ahora - jefeFinalN5.inicioEstado >= 1000) {
+                        jefeFinalN5.estado = 'golpe_cola';
+                        jefeFinalN5.inicioEstado = ahora;
+                    }
+                } else if (jefeFinalN5.estado === 'golpe_cola') {
+                    const tCola = Math.min(1, (ahora - jefeFinalN5.inicioEstado) / 220);
+                    const distJugJefe = Math.hypot(nuevoJugCx - jefeFinalN5.x, nuevoJugCy - jefeFinalN5.y);
+                    const angJugJefe = Math.atan2(nuevoJugCy - jefeFinalN5.y, nuevoJugCx - jefeFinalN5.x);
+                    let diffAng = angJugJefe - jefeFinalN5.colaAnguloCentro;
+                    while (diffAng > Math.PI) diffAng -= Math.PI * 2;
+                    while (diffAng < -Math.PI) diffAng += Math.PI * 2;
+
+                    if (!jefeFinalN5.colaGolpeo && distJugJefe <= jefeFinalN5.colaAlcance && Math.abs(diffAng) <= Math.PI * 0.48) {
+                        jefeFinalN5.colaGolpeo = true;
+                        recibirDanioJugadorNivel5(2, true);
+                    }
+
+                    if (tCola >= 1) {
+                        jefeFinalN5.estado = 'recuperando';
+                        jefeFinalN5.inicioEstado = ahora;
+                        jefeFinalN5.proximoAtaqueEn = ahora + 800;
+                    }
+                } else if (jefeFinalN5.estado === 'recuperando') {
+                    if (ahora - jefeFinalN5.inicioEstado >= 350) {
+                        jefeFinalN5.estado = 'acechando';
+                    }
+                }
+
+                // Contacto directo con el cuerpo del jefe
+                if (Math.hypot(nuevoJugCx - jefeFinalN5.x, nuevoJugCy - jefeFinalN5.y) < jefeFinalN5.radio * 0.85 + jugador.tam * 0.4) {
+                    recibirDanioJugadorNivel5(1, true);
+                }
+            }
+
+            // DIBUJO DE AVISOS VISUALES DEL JEFE ANTES DE GOLPEAR
+            if (jefeFinalN5.estado === 'aviso_embestida') {
+                const pAviso = Math.min(1, (ahora - jefeFinalN5.inicioEstado) / 1000);
+                ctx.save();
+                ctx.strokeStyle = `rgba(244, 63, 94, ${0.35 + pAviso * 0.6})`;
+                ctx.lineWidth = jefeFinalN5.radio * 1.6;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(jefeFinalN5.embestidaOrigenX, jefeFinalN5.embestidaOrigenY);
+                ctx.lineTo(jefeFinalN5.embestidaDestinoX, jefeFinalN5.embestidaDestinoY);
+                ctx.stroke();
+
+                ctx.strokeStyle = '#fecdd3';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([14, 10]);
+                ctx.beginPath();
+                ctx.moveTo(jefeFinalN5.embestidaOrigenX, jefeFinalN5.embestidaOrigenY);
+                ctx.lineTo(jefeFinalN5.embestidaDestinoX, jefeFinalN5.embestidaDestinoY);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            if (jefeFinalN5.estado === 'aviso_cola' || jefeFinalN5.estado === 'golpe_cola') {
+                const esGolpe = jefeFinalN5.estado === 'golpe_cola';
+                const pCola = esGolpe ? 1 : Math.min(1, (ahora - jefeFinalN5.inicioEstado) / 1000);
+                ctx.save();
+                ctx.strokeStyle = esGolpe ? 'rgba(244, 63, 94, 0.92)' : `rgba(239, 68, 68, ${0.35 + pCola * 0.55})`;
+                ctx.lineWidth = esGolpe ? 28 : (14 + pCola * 12);
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.arc(
+                    jefeFinalN5.x,
+                    jefeFinalN5.y,
+                    jefeFinalN5.colaAlcance * 0.85,
+                    jefeFinalN5.colaAnguloCentro - Math.PI * 0.45,
+                    jefeFinalN5.colaAnguloCentro + Math.PI * 0.45
+                );
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Dibujar al Jefe Final Von Ryan's Leaper (3x jugador, diseño aterrador)
+            dibujarJefeVonRyanTopDownN5(jefeFinalN5, ahora);
+
+            // Barra superior de vida del Jefe Final (3000 HP)
+            const barW = Math.min(540, w * 0.60);
+            const barX = (w - barW) / 2;
+            ctx.fillStyle = 'rgba(15, 5, 25, 0.90)';
+            ctx.fillRect(barX, 46, barW, 18);
+            ctx.fillStyle = '#c026d3';
+            ctx.fillRect(barX, 46, barW * (jefeFinalN5.vida / jefeFinalN5.vidaMax), 18);
+            ctx.strokeStyle = '#f5d0fe';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(barX, 46, barW, 18);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 12px "Courier New", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(`DEPREDADOR ALFA DE LA COLMENA: ${jefeFinalN5.vida} / ${jefeFinalN5.vidaMax}`, w / 2, 59);
+        }
+
+        // 7. Enemigos normales de apoyo en la arena top-down
+        minionsTopDownN5.forEach(en => {
+            if (puedeMoverse && jugador.vidas > 0) {
+                const dx = nuevoJugCx - (en.x + en.tam / 2);
+                const dy = nuevoJugCy - (en.y + en.tam / 2);
+                const d = Math.hypot(dx, dy) || 1;
+                en.vx = (dx / d) * 2.5;
+                en.vy = (dy / d) * 2.5;
+                en.x += en.vx;
+                en.y += en.vy;
+
+                if (en.esLanzadorAcido && d > 160 && d < 420 && ahora - en.ultimoAcido >= 2800) {
+                    en.ultimoAcido = ahora;
+                    avisosAcidoTopDownN5.push({
+                        x: nuevoJugCx + (Math.random() - 0.5) * 40,
+                        y: nuevoJugCy + (Math.random() - 0.5) * 40,
+                        radio: 34,
+                        creadoEn: ahora
+                    });
+                }
+
+                if (d < (jugador.tam + en.tam) * 0.42) {
+                    if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) {
+                        en.x -= en.vx * 8;
+                        en.y -= en.vy * 8;
+                    } else {
+                        recibirDanioJugadorNivel5(1, false);
+                    }
+                }
+            }
+            dibujarEnemigoTiranidoN5(en, ahora, true);
+        });
+
+        // 8. Retícula de auto-apuntado sobre el objetivo fijado
+        if (objetivoX !== null && objetivoY !== null && jugador.vidas > 0) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(250, 204, 21, 0.72)';
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.arc(objetivoX, objetivoY, 16 + Math.sin(ahora / 100) * 2, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // 9. Proyectiles del Bólter del jugador en vista aérea
+        estadoMarineP2.balas = estadoMarineP2.balas.filter(b => {
+            b.x += b.vx;
+            b.y += b.vy;
+
+            for (let i = 0; i < minionsTopDownN5.length; i++) {
+                const en = minionsTopDownN5[i];
+                if (b.x >= en.x && b.x <= en.x + en.tam && b.y >= en.y && b.y <= en.y + en.tam) {
+                    en.vida -= b.danio;
+                    en.flashHasta = ahora + 75;
+                    if (en.vida <= 0) minionsTopDownN5.splice(i, 1);
+                    return false;
+                }
+            }
+
+            if (jefeFinalN5 && !jefeFinalN5.muerto &&
+                Math.hypot(b.x - jefeFinalN5.x, b.y - jefeFinalN5.y) <= jefeFinalN5.radio) {
+                jefeFinalN5.vida = Math.max(0, jefeFinalN5.vida - b.danio);
+                jefeFinalN5.flashHasta = ahora + 65;
+                if (jefeFinalN5.vida === 0) {
+                    jefeFinalN5.muerto = true;
+                    iniciarExplosionYCinematicaN5(jefeFinalN5.x, jefeFinalN5.y, ahora);
+                }
+                return false;
+            }
+
+            ctx.fillStyle = '#fbbf24';
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            return b.x > borde - 10 && b.x < w - borde + 10 && b.y > borde - 10 && b.y < h - borde + 10;
+        });
+
+        // 10. Dibujar al jugador en vista aérea
+        dibujarJugadorMarineP2(playerN5.x, playerN5.y, ahora, true);
+
+        if (textoContador !== '') {
+            ctx.font = 'bold 48px "Courier New", monospace';
+            ctx.fillStyle = textoContador === 'GAME OVER' ? '#ff1e1e' : '#ffd60a';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(textoContador, w / 2, h / 2);
+        }
+    }
+
+    // ============================================================
+    // 11. BUCLE PRINCIPAL DEL NIVEL 5
+    // ============================================================
+    function bucleNivel5() {
+        if (!juegoActivo || nivelActual !== 5) return;
+        const ahora = Date.now();
+        const w = canvas.width;
+        const h = canvas.height;
+        const sueloY = h - 105;
+
+        if (modoArenaTopDownN5) {
+            actualizarYRenderizarArenaTopDownN5(w, h, ahora);
+            animacionIdNivel5 = requestAnimationFrame(bucleNivel5);
+            return;
+        }
+
+        if (playerN5.saliendoPortal) {
+            const tSalida = ahora - playerN5.inicioSalida;
+            playerN5.x = 115 + Math.min(95, (tSalida / 1400) * 95);
+            if (tSalida >= 1400) {
+                playerN5.saliendoPortal = false;
+                puedeMoverse = true;
+                document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 5 — TRAMO 1: EL PUENTE EN LLAMAS';
+            }
+        }
+
+        if (puedeMoverse && !playerN5.saliendoPortal) {
+            if (playerN5.x >= NIVEL5_FIN_PUENTE && zonaActualTextoN5 !== 'CIUDAD') {
+                zonaActualTextoN5 = 'CIUDAD';
+                document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 5 — TRAMO 2: AVANZANDO AL CENTRO DE LA CIUDAD';
+            } else if (playerN5.x < NIVEL5_FIN_PUENTE && zonaActualTextoN5 !== 'PUENTE') {
+                zonaActualTextoN5 = 'PUENTE';
+                document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 5 — TRAMO 1: EL PUENTE EN LLAMAS';
+            }
+        }
+
+        if (puedeMoverse && jugador.vidas > 0) {
+            playerN5.vx = 0;
+            if (teclas.ArrowLeft || teclasExtraP2.KeyA) {
+                playerN5.vx = -playerN5.vel;
+                estadoMarineP2.direccion = -1;
+            }
+            if (teclas.ArrowRight || teclasExtraP2.KeyD) {
+                playerN5.vx = playerN5.vel;
+                estadoMarineP2.direccion = 1;
+            }
+
+            playerN5.x += playerN5.vx;
+            playerN5.x = Math.max(20, Math.min(NIVEL5_LONGITUD - jugador.tam - 20, playerN5.x));
+
+            if (playerN5.x >= 8650) {
+                iniciarArenaJefeTopDownN5();
+                animacionIdNivel5 = requestAnimationFrame(bucleNivel5);
+                return;
+            }
+
+            const prevBottom = playerN5.y + jugador.tam;
+            playerN5.vy += playerN5.gravedad;
+            playerN5.y += playerN5.vy;
+            playerN5.enSuelo = false;
+
+            cochesDestruidosN5.forEach(coche => {
+                const topCoche = sueloY - coche.alto;
+                const dentroX = (playerN5.x + jugador.tam * 0.75 > coche.x) && (playerN5.x + jugador.tam * 0.25 < coche.x + coche.ancho);
+                if (dentroX && playerN5.vy >= 0 && prevBottom <= topCoche + 12 && playerN5.y + jugador.tam >= topCoche) {
+                    playerN5.y = topCoche - jugador.tam;
+                    playerN5.vy = 0;
+                    playerN5.enSuelo = true;
+                }
+            });
+
+            tramosPuenteN5.forEach(tramo => {
+                const dentroX = (playerN5.x + jugador.tam * 0.7 > tramo.x) && (playerN5.x + jugador.tam * 0.3 < tramo.x + tramo.ancho);
+                if (dentroX && playerN5.vy >= 0 && prevBottom <= sueloY + 14 && playerN5.y + jugador.tam >= sueloY) {
+                    playerN5.y = sueloY - jugador.tam;
+                    playerN5.vy = 0;
+                    playerN5.enSuelo = true;
+                }
+            });
+
+            if (playerN5.y > h + 40) {
+                estadoMarineP2.escudoActivo = false;
+                recibirDanioJugadorNivel5(1, false);
+                if (jugador.vidas > 0) {
+                    playerN5.x = Math.max(180, playerN5.x - 190);
+                    playerN5.y = sueloY - jugador.tam - 60;
+                    playerN5.vy = 0;
+                }
+            }
+
+            if (estadoMarineP2.disparando && !estadoMarineP2.escudoActivo && ahora - estadoMarineP2.ultimoDisparo >= 110) {
+                estadoMarineP2.ultimoDisparo = ahora;
+                const dir = estadoMarineP2.direccion;
+                estadoMarineP2.balas.push({
+                    x: playerN5.x + jugador.tam / 2 + dir * 24,
+                    y: playerN5.y + jugador.tam * 0.56,
+                    vx: dir * 16.5,
+                    vy: 0,
+                    danio: 10
+                });
+            }
+
+            if (playerN5.x < 8400 && enemigosN5.length < 9 && ahora - ultimoSpawnHordaN5 >= 2200) {
+                ultimoSpawnHordaN5 = ahora;
+                const spawnX = playerN5.x + w * 0.68;
+                if (spawnX < 8500 && haySueloEnX_N5(spawnX, 62)) {
+                    enemigosN5.push(crearEnemigoTiranidoN5(spawnX, sueloY - 62, Math.random() > 0.45));
+                }
+            }
+
+            if (playerN5.x >= 4400 && playerN5.x < 8300 && guardianesEliteN5.length < 2 && ahora - ultimoSpawnEliteN5 >= 9500) {
+                ultimoSpawnEliteN5 = ahora;
+                const spawnEliteX = playerN5.x + w * 0.72;
+                if (spawnEliteX < 8400 && haySueloEnX_N5(spawnEliteX, 112)) {
+                    guardianesEliteN5.push(crearGuardianEliteN5(spawnEliteX, sueloY - 104));
+                }
+            }
+        }
+
+        const targetCamX = Math.max(0, Math.min(NIVEL5_LONGITUD - w, playerN5.x - w * 0.30));
+        camaraX_N5 += (targetCamX - camaraX_N5) * 0.14;
+
+        dibujarFondoGuerraN5(w, h, sueloY, ahora);
+        dibujarPuenteYCochesN5(w, h, sueloY, ahora);
+
+        if (portalInicioN5) {
+            const px = portalInicioN5.x - camaraX_N5;
+            if (px > -120 && px < w + 120) {
+                ctx.save();
+                const giro = ahora / 300;
+                const pGrad = ctx.createRadialGradient(px, portalInicioN5.y, 6, px, portalInicioN5.y, portalInicioN5.radio);
+                pGrad.addColorStop(0, '#ffffff');
+                pGrad.addColorStop(0.45, '#c084fc');
+                pGrad.addColorStop(0.85, '#6b21a8');
+                pGrad.addColorStop(1, 'rgba(88, 28, 135, 0)');
+                ctx.fillStyle = pGrad;
+                ctx.beginPath();
+                ctx.ellipse(px, portalInicioN5.y, portalInicioN5.radio * 0.62, portalInicioN5.radio * 1.15, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = '#f3e8ff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.ellipse(px, portalInicioN5.y, portalInicioN5.radio * 0.45, portalInicioN5.radio * 0.95, Math.sin(giro) * 0.1, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        enemigosN5.forEach(en => {
+            if (puedeMoverse && jugador.vidas > 0) {
+                const distJugador = playerN5.x - en.x;
+                const absDist = Math.abs(distJugador);
+                if (absDist < w * 0.85) {
+                    const dirMov = Math.sign(distJugador || -1);
+
+                    if (en.esLanzadorAcido && absDist > 170 && absDist < 450) {
+                        en.vx = dirMov * 0.01;
+                        if (ahora - en.ultimoAcido >= 2400) {
+                            en.ultimoAcido = ahora;
+                            en.animEscupirHasta = ahora + 300;
+                            const tiempoVuelo = Math.max(28, Math.min(48, absDist / 8.5));
+                            const vxAcido = distJugador / tiempoVuelo;
+                            const vyAcido = -0.5 * 0.45 * tiempoVuelo + ((playerN5.y - en.y) / tiempoVuelo);
+                            proyectilesAcidoN5.push({
+                                x: en.x + en.tam / 2 + dirMov * 18,
+                                y: en.y + 14,
+                                vx: vxAcido,
+                                vy: vyAcido,
+                                radio: 7
+                            });
+                        }
+                    } else {
+                        const velBase = en.esLanzadorAcido ? 1.9 : 2.8;
+                        const nextX = en.x + dirMov * velBase;
+                        if (haySueloEnX_N5(nextX, en.tam)) {
+                            en.x = nextX;
+                            en.vx = dirMov * velBase;
+                        }
+                        const chocaCoche = cochesDestruidosN5.some(c =>
+                            (en.x + en.tam > c.x - 6) && (en.x < c.x + c.ancho + 6) && (en.y + en.tam > sueloY - c.alto + 8)
+                        );
+                        if (chocaCoche && en.enSuelo) {
+                            en.vy = -12.5;
+                            en.enSuelo = false;
+                        }
+                    }
+                }
+
+                const prevEnBottom = en.y + en.tam;
+                en.vy += 0.72;
+                en.y += en.vy;
+                en.enSuelo = false;
+
+                cochesDestruidosN5.forEach(coche => {
+                    const topCoche = sueloY - coche.alto;
+                    const dentroX = (en.x + en.tam * 0.75 > coche.x) && (en.x + en.tam * 0.25 < coche.x + coche.ancho);
+                    if (dentroX && en.vy >= 0 && prevEnBottom <= topCoche + 12 && en.y + en.tam >= topCoche) {
+                        en.y = topCoche - en.tam;
+                        en.vy = 0;
+                        en.enSuelo = true;
+                    }
+                });
+
+                tramosPuenteN5.forEach(tramo => {
+                    const dentroX = (en.x + en.tam * 0.7 > tramo.x) && (en.x + en.tam * 0.3 < tramo.x + tramo.ancho);
+                    if (dentroX && en.vy >= 0 && prevEnBottom <= sueloY + 14 && en.y + en.tam >= sueloY) {
+                        en.y = sueloY - en.tam;
+                        en.vy = 0;
+                        en.enSuelo = true;
+                    }
+                });
+
+                const toca = Math.abs((en.x + en.tam / 2) - (playerN5.x + jugador.tam / 2)) < (jugador.tam + en.tam) * 0.36 &&
+                             Math.abs((en.y + en.tam / 2) - (playerN5.y + jugador.tam / 2)) < (jugador.tam + en.tam) * 0.42;
+                if (toca) {
+                    if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) {
+                        en.x += (en.x >= playerN5.x ? 30 : -30);
+                    } else {
+                        recibirDanioJugadorNivel5(1, false);
+                    }
+                }
+            }
+            if (en.x - camaraX_N5 > -100 && en.x - camaraX_N5 < w + 100) {
+                dibujarEnemigoTiranidoN5(en, ahora, false);
+            }
+        });
+
+        proyectilesAcidoN5 = proyectilesAcidoN5.filter(ac => {
+            ac.vy += 0.45;
+            ac.x += ac.vx;
+            ac.y += ac.vy;
+
+            const axScreen = ac.x - camaraX_N5;
+            const jugCx = playerN5.x + jugador.tam / 2;
+            const jugCy = playerN5.y + jugador.tam / 2;
+
+            if (Math.hypot(ac.x - jugCx, ac.y - jugCy) <= jugador.tam * 0.62 + ac.radio) {
+                if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) {
+                    ctx.fillStyle = '#bef264';
+                    ctx.beginPath();
+                    ctx.arc(axScreen, ac.y, 16, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    recibirDanioJugadorNivel5(1, false);
+                }
+                return false;
+            }
+
+            if (ac.y >= sueloY - 4) {
+                if (haySueloEnX_N5(ac.x - 15, 30)) {
+                    charcosAcidoN5.push({
+                        x: ac.x - 18,
+                        y: sueloY - 4,
+                        ancho: 36,
+                        expiraEn: ahora + 2200
+                    });
+                }
+                return false;
+            }
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(132, 204, 22, 0.45)';
+            ctx.beginPath();
+            ctx.arc(axScreen - ac.vx * 1.2, ac.y - ac.vy * 1.2, ac.radio * 0.75, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#a3e635';
+            ctx.strokeStyle = '#365314';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(axScreen, ac.y, ac.radio, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+
+            return ac.y < h + 40;
+        });
+
+        charcosAcidoN5 = charcosAcidoN5.filter(ch => {
+            if (ahora >= ch.expiraEn) return false;
+            const cxScreen = ch.x - camaraX_N5;
+            ctx.fillStyle = 'rgba(163, 230, 53, 0.8)';
+            ctx.beginPath();
+            ctx.roundRect(cxScreen, ch.y, ch.ancho, 5, 3);
+            ctx.fill();
+
+            const pisaCharco = (playerN5.x + jugador.tam * 0.7 > ch.x) &&
+                               (playerN5.x + jugador.tam * 0.3 < ch.x + ch.ancho) &&
+                               (playerN5.y + jugador.tam >= sueloY - 6);
+            if (pisaCharco && (!estadoMarineP2.escudoActivo || estadoMarineP2.escudoRoto)) {
+                recibirDanioJugadorNivel5(1, false);
+            }
+            return true;
+        });
+
+        guardianesEliteN5.forEach(g => {
+            if (puedeMoverse && jugador.vidas > 0) {
+                const centroJugX = playerN5.x + jugador.tam / 2;
+                const centroGX = g.x + g.ancho / 2;
+                const distX = centroJugX - centroGX;
+                const absDistX = Math.abs(distX);
+
+                if (absDistX < w * 0.95) {
+                    const dirMov = Math.sign(distX || -1);
+
+                    if (g.estadoAtaque === 'caminando') {
+                        g.vx = dirMov * Math.abs(g.vx);
+                        if (absDistX <= 96) {
+                            g.estadoAtaque = 'preparando';
+                            g.inicioAtaque = ahora;
+                            g.golpeAplicadoEnEsteTajo = false;
+                        } else {
+                            const nextX = g.x + g.vx;
+                            if (haySueloEnX_N5(nextX, g.ancho)) {
+                                g.x = nextX;
+                            }
+                            const chocaCoche = cochesDestruidosN5.some(c =>
+                                (g.x + g.ancho > c.x - 4) && (g.x < c.x + c.ancho + 4) && (g.y + g.alto > sueloY - c.alto + 6)
+                            );
+                            if (chocaCoche && g.enSuelo) {
+                                g.vy = -10.5;
+                                g.enSuelo = false;
+                            }
+                        }
+                    } else if (g.estadoAtaque === 'preparando') {
+                        if (ahora - g.inicioAtaque >= 420) {
+                            g.estadoAtaque = 'tajando';
+                            g.inicioAtaque = ahora;
+                        }
+                    } else if (g.estadoAtaque === 'tajando') {
+                        if (!g.golpeAplicadoEnEsteTajo && absDistX <= 122 && Math.abs((g.y + g.alto * 0.6) - (playerN5.y + jugador.tam / 2)) < 75) {
+                            g.golpeAplicadoEnEsteTajo = true;
+                            if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) {
+                                playerN5.x += dirMov * 22;
+                            } else {
+                                recibirDanioJugadorNivel5(2, false);
+                            }
+                        }
+                        if (ahora - g.inicioAtaque >= 240) {
+                            g.estadoAtaque = 'recuperando';
+                            g.inicioAtaque = ahora;
+                        }
+                    } else if (g.estadoAtaque === 'recuperando') {
+                        if (ahora - g.inicioAtaque >= 380) {
+                            g.estadoAtaque = 'caminando';
+                        }
+                    }
+                }
+
+                const prevGBottom = g.y + g.alto;
+                g.vy += 0.95;
+                g.y += g.vy;
+                g.enSuelo = false;
+
+                cochesDestruidosN5.forEach(coche => {
+                    const topCoche = sueloY - coche.alto;
+                    const dentroX = (g.x + g.ancho * 0.72 > coche.x) && (g.x + g.ancho * 0.28 < coche.x + coche.ancho);
+                    if (dentroX && g.vy >= 0 && prevGBottom <= topCoche + 14 && g.y + g.alto >= topCoche) {
+                        g.y = topCoche - g.alto;
+                        g.vy = 0;
+                        g.enSuelo = true;
+                    }
+                });
+
+                tramosPuenteN5.forEach(tramo => {
+                    const dentroX = (g.x + g.ancho * 0.7 > tramo.x) && (g.x + g.ancho * 0.3 < tramo.x + tramo.ancho);
+                    if (dentroX && g.vy >= 0 && prevGBottom <= sueloY + 14 && g.y + g.alto >= sueloY) {
+                        g.y = sueloY - g.alto;
+                        g.vy = 0;
+                        g.enSuelo = true;
+                    }
+                });
+            }
+
+            if (g.x - camaraX_N5 > -180 && g.x - camaraX_N5 < w + 180) {
+                dibujarGuardianEliteN5(g, ahora);
+            }
+        });
+
+        estadoMarineP2.balas = estadoMarineP2.balas.filter(b => {
+            b.x += b.vx;
+            const bxScreen = b.x - camaraX_N5;
+
+            for (let i = 0; i < enemigosN5.length; i++) {
+                const en = enemigosN5[i];
+                if (b.x >= en.x && b.x <= en.x + en.tam && b.y >= en.y && b.y <= en.y + en.tam) {
+                    en.vida -= b.danio;
+                    en.flashHasta = ahora + 75;
+                    if (en.vida <= 0) enemigosN5.splice(i, 1);
+                    return false;
+                }
+            }
+
+            for (let i = 0; i < guardianesEliteN5.length; i++) {
+                const g = guardianesEliteN5[i];
+                if (b.x >= g.x && b.x <= g.x + g.ancho && b.y >= g.y && b.y <= g.y + g.alto) {
+                    g.vida -= b.danio;
+                    g.flashHasta = ahora + 70;
+                    if (g.vida <= 0) guardianesEliteN5.splice(i, 1);
+                    return false;
+                }
+            }
+
+            ctx.fillStyle = '#fbbf24';
+            ctx.fillRect(bxScreen - 9, b.y - 2.5, 18, 5);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(bxScreen - 5, b.y - 1, 10, 2);
+
+            return bxScreen > -40 && bxScreen < w + 40;
+        });
+
+        dibujarJugadorMarineP2(playerN5.x - camaraX_N5, playerN5.y, ahora, false);
+
+        const prog = Math.min(1, Math.max(0, playerN5.x / 8650));
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+        ctx.fillRect(24, 52, 260, 10);
+        ctx.fillStyle = playerN5.x >= NIVEL5_FIN_PUENTE ? '#f97316' : '#c084fc';
+        ctx.fillRect(24, 52, 260 * prog, 10);
+        const marcaCiudadX = 24 + 260 * (NIVEL5_FIN_PUENTE / 8650);
+        ctx.fillStyle = '#facc15';
+        ctx.fillRect(marcaCiudadX - 1, 49, 2, 16);
+        ctx.strokeStyle = '#94a3b8';
+        ctx.strokeRect(24, 52, 260, 10);
+
+        if (textoContador !== '') {
+            ctx.font = 'bold 48px "Courier New", monospace';
+            ctx.fillStyle = textoContador === 'GAME OVER' ? '#ff1e1e' : '#ffd60a';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(textoContador, w / 2, h / 2);
+        }
+
+        animacionIdNivel5 = requestAnimationFrame(bucleNivel5);
+    }
+
+    inicializarUIParte2();
+</script>
