@@ -213,9 +213,9 @@ REPORTE_MINUTO = int(_hora_reporte[1])
 
 CELERY_BEAT_SCHEDULE = {
     # Verificar stock bajo cada hora
-    'verificar-stock-bajo-cada-hora': {
+   'verificar-stock-bajo-cada-hora': {
         'task':     'ventas.verificar_stock_bajo',
-        'schedule': timedelta(hours=1),
+        'schedule': crontab(hour=17, minute=54),
         'args':     (5,),   # umbral = 5 unidades
         'options':  {'queue': 'erp_django'},
     },
