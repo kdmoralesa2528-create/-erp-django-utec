@@ -207,8 +207,11 @@ ANYMAIL = {
 # ── CELERY BEAT — Tareas programadas ──────────────────────────────────────
 from celery.schedules import crontab
 
-CELERY_BEAT_SCHEDULE = {
+_hora_reporte = os.getenv('REPORTE_DIARIO_HORA', '18:30').split(':')
+REPORTE_HORA = int(_hora_reporte[0])
+REPORTE_MINUTO = int(_hora_reporte[1])
 
+CELERY_BEAT_SCHEDULE = {
     # Verificar stock bajo cada hora
     'verificar-stock-bajo-cada-hora': {
         'task':     'ventas.verificar_stock_bajo',
@@ -217,14 +220,14 @@ CELERY_BEAT_SCHEDULE = {
         'options':  {'queue': 'erp_django'},
     },
 
-    # Reporte de ventas diario a las 8:00 AM (hora México)
+    # Reporte de ventas diario (configurable desde Render con REPORTE_DIARIO_HORA)
     'reporte-ventas-diario-8am': {
         'task':     'ventas.reporte_ventas_diario',
-        'schedule': crontab(hour=8, minute=0),
+        'schedule': crontab(hour=REPORTE_HORA, minute=REPORTE_MINUTO),
         'options':  {'queue': 'erp_django'},
     },
-
 }
+
 
 # Necesario para que Beat use la zona horaria de Django (no UTC)
 CELERY_BEAT_TIMEZONE = TIME_ZONE   # 'America/Mexico_City'
