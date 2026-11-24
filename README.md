@@ -60,3 +60,34 @@ python manage.py migrate
 python manage.py createsuperuser
 python manage.py crear_grupos
 python manage.py runserver
+
+python manage.py test tests.test_w24_smoke
+python manage.py test tests
+coverage run manage.py test tests && coverage report
+
+2. **`docs/API.md`** (dentro de la carpeta `docs/`):
+```markdown
+# API REST — Referencia Completa
+## ERP Django · UTEC Celaya
+
+Base URL: `https://erp-django-utec.onrender.com/api/`
+
+## Autenticación
+
+La API usa **Token Authentication** para escritura (`POST`, `PUT`, `PATCH`, `DELETE`). Las lecturas (`GET`) son públicas.
+
+## Endpoints
+
+| Recurso | Rutas disponibles | Descripción |
+|---|---|---|
+| **Categorías** | `GET, POST /api/categorias/` · `GET, PUT, DELETE /api/categorias/{id}/` | CRUD de categorías de producto |
+| **Productos** | `GET, POST /api/productos/` · `GET, PUT, PATCH, DELETE /api/productos/{id}/` | Catálogo paginado (20/pág) con `categoria_nombre`, `proveedor_nombre` e `imagen_url` |
+| **Clientes** | `GET, POST /api/clientes/` · `GET, PUT, PATCH, DELETE /api/clientes/{id}/` | Gestión de clientes activos |
+| **Proveedores** | `GET, POST /api/proveedores/` · `GET, PUT, DELETE /api/proveedores/{id}/` | Gestión de proveedores |
+| **Ventas** | `GET, POST /api/ventas/` · `GET, DELETE /api/ventas/{id}/` | Encabezados y líneas anidadas de venta con total calculado |
+
+## Códigos de Respuesta
+
+- `200 OK` / `201 Created` / `204 No Content`: Operación exitosa.
+- `400 Bad Request`: Datos inválidos.
+- `401 Unauthorized` / `403 Forbidden`: Token faltante, inválido o sin permisos.
