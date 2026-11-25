@@ -11,6 +11,9 @@ from django.conf import settings
 from django.core.mail import EmailMultiAlternatives, mail_admins
 from django.template.loader import render_to_string
 from django.utils import timezone
+from django.core.mail import send_mail
+from configuracion.models import ConfiguracionERP
+
 
 logger = logging.getLogger(__name__)
 
@@ -109,24 +112,37 @@ def verificar_stock_bajo(self, umbral: int = 5) -> dict:
             f"- {p['nombre']} (Stock actual: {p['stock']})"
             for p in productos_bajos
         ]
+    if productos_bajos:
+        lineas = [
+            f"- {p['nombre']} (Stock actual: {p['stock']})"
+            for p in productos_bajos
+        ]
         mensaje = (
             f"Se detectaron {len(productos_bajos)} producto(s) con stock menor a {umbral}:\n\n"
             + "\n".join(lineas)
         )
-        mail_admins(
+        config = ConfiguracionERP.get_instance()
+        destinatario = (
+            getattr(config, 'email_reportes', None)
+            or getattr(config, 'correo', None)
+            or getattr(settings, 'EMAIL_HOST_USER', None)
+            or settings.DEFAULT_FROM_EMAIL
+        )
+        send_mail(
             subject=f"Alerta de stock bajo ({len(productos_bajos)} productos)",
             message=mensaje,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[destinatario],
             fail_silently=False,
         )
         logger.warning(
-            f'[Tarea verificar_stock] Alerta enviada a ADMINS por {len(productos_bajos)} producto(s).'
+            f'[Tarea verificar_stock] Alerta enviada a {destinatario} por {len(productos_bajos)} producto(s).'
         )
     else:
         logger.info(
             f'[Tarea verificar_stock] Todos los productos tienen '
             f'stock >= {umbral}. OK.'
         )
-
     return {
         'umbral': umbral,
         'productos_bajos': productos_bajos,
