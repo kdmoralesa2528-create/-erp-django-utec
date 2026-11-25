@@ -215,7 +215,7 @@ CELERY_BEAT_SCHEDULE = {
     # Verificar stock bajo cada hora
    'verificar-stock-bajo-cada-hora': {
         'task':     'ventas.verificar_stock_bajo',
-        'schedule': crontab(minute=0),
+        'schedule': crontab(hour=19, minute=30),
         'args':     (5,),   # umbral = 5 unidades
         'options':  {'queue': 'erp_django'},
     },
