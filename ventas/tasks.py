@@ -107,11 +107,7 @@ def verificar_stock_bajo(self, umbral: int = 5) -> dict:
         .order_by('stock')
     )
 
-    if productos_bajos:
-        lineas = [
-            f"- {p['nombre']} (Stock actual: {p['stock']})"
-            for p in productos_bajos
-        ]
+    
     if productos_bajos:
         lineas = [
             f"- {p['nombre']} (Stock actual: {p['stock']})"
