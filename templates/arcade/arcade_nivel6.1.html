@@ -1,0 +1,1752 @@
+{% load static %}
+<script>
+    // Limpia cualquier bloque duplicado de "ARCADE — PARTE 2" si dos plantillas lo renderizaron
+    document.addEventListener('DOMContentLoaded', () => {
+        const titulosParte2 = Array.from(document.querySelectorAll('h1, h2, h3, div, p')).filter(
+            el => el.children.length === 0 && el.textContent.includes('ARCADE — PARTE 2')
+        );
+        if (titulosParte2.length > 1) {
+            for (let i = 1; i < titulosParte2.length; i++) {
+                const contenedor = titulosParte2[i].closest('section, .arcade-parte2, .nivel-seccion') || titulosParte2[i].parentElement;
+                if (contenedor) contenedor.style.display = 'none';
+            }
+        }
+    });
+
+    let animacionIdNivel6_1 = null;
+    let estadoNivel6_1 = null;
+    let audioNivel6_1 = null;
+
+    // ============================================================
+    // 0. CARGADOR DE SPRITES SIN CUADRÍCULA ("CUBO") DE FONDO
+    // ============================================================
+    const spritesNivel6_1 = {
+        jugador: null,
+        gabrielCalmado: null,
+        gabrielRiendo: null,
+        gabrielOscuroFrames: []
+    };
+
+    function crearSpriteTransparenteN6_1(url, callback) {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function () {
+            const off = document.createElement('canvas');
+            off.width = img.width;
+            off.height = img.height;
+            const octx = off.getContext('2d');
+            octx.drawImage(img, 0, 0);
+
+            const imgData = octx.getImageData(0, 0, off.width, off.height);
+            const d = imgData.data;
+            const w = off.width;
+            const h = off.height;
+            const visitado = new Uint8Array(w * h);
+
+            // Elimina tanto la cuadrícula gris oscura como la gris clara de los bordes
+            function esFondoCuadricula(idx) {
+                const r = d[idx];
+                const g = d[idx + 1];
+                const b = d[idx + 2];
+                const a = d[idx + 3];
+                if (a < 25) return true;
+                const maxC = Math.max(r, g, b);
+                const minC = Math.min(r, g, b);
+                const diff = maxC - minC;
+                // Píxeles neutros (grises/blancos de cuadrícula) sin tinte morado ni negro puro de alas
+                const esGrisClaro = (diff <= 28 && minC >= 130);
+                const esGrisMedioOscuro = (diff <= 14 && maxC <= 135 && minC >= 28 && (b - r) <= 8);
+                return esGrisClaro || esGrisMedioOscuro;
+            }
+
+            const cola = [];
+            for (let x = 0; x < w; x++) {
+                cola.push(x, (h - 1) * w + x);
+            }
+            for (let y = 0; y < h; y++) {
+                cola.push(y * w, y * w + (w - 1));
+            }
+
+            while (cola.length > 0) {
+                const pos = cola.pop();
+                if (visitado[pos]) continue;
+                visitado[pos] = 1;
+
+                const idx = pos * 4;
+                if (esFondoCuadricula(idx)) {
+                    d[idx + 3] = 0;
+                    const px = pos % w;
+                    const py = (pos - px) / w;
+                    if (px > 0 && !visitado[pos - 1]) cola.push(pos - 1);
+                    if (px < w - 1 && !visitado[pos + 1]) cola.push(pos + 1);
+                    if (py > 0 && !visitado[pos - w]) cola.push(pos - w);
+                    if (py < h - 1 && !visitado[pos + w]) cola.push(pos + w);
+                }
+            }
+
+            let minX = w, minY = h, maxX = 0, maxY = 0;
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    if (d[(y * w + x) * 4 + 3] > 25) {
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
+                        if (y < minY) minY = y;
+                        if (y > maxY) maxY = y;
+                    }
+                }
+            }
+
+            octx.putImageData(imgData, 0, 0);
+
+            if (maxX > minX && maxY > minY) {
+                const recorte = document.createElement('canvas');
+                recorte.width = maxX - minX + 1;
+                recorte.height = maxY - minY + 1;
+                recorte.getContext('2d').drawImage(
+                    off,
+                    minX, minY, recorte.width, recorte.height,
+                    0, 0, recorte.width, recorte.height
+                );
+                callback(recorte);
+            } else {
+                callback(off);
+            }
+        };
+        img.onerror = function () {
+            console.warn('No se pudo cargar sprite en Nivel 6.1:', url);
+        };
+        img.src = url;
+    }
+
+    function precargarSpritesNivel6_1() {
+        if (!spritesNivel6_1.jugador) {
+            crearSpriteTransparenteN6_1("{% static 'img/arcade/Gemini_Generated_Image_ul4nnul4nnul4nnu.jpg' %}", c => {
+                spritesNivel6_1.jugador = c;
+            });
+        }
+        if (!spritesNivel6_1.gabrielCalmado) {
+            crearSpriteTransparenteN6_1("{% static 'img/arcade/gabrel_calmado.png' %}", c => {
+                spritesNivel6_1.gabrielCalmado = c;
+            });
+        }
+        // Imagen nueva de Gabriel riéndose cuando te hace daño (guárdala como gabriel_riendo.jpg en static/img/arcade/)
+        if (!spritesNivel6_1.gabrielRiendo) {
+            crearSpriteTransparenteN6_1("{% static 'img/arcade/gabriel_riendo.jpg' %}", c => {
+                spritesNivel6_1.gabrielRiendo = c;
+            });
+        }
+        if (spritesNivel6_1.gabrielOscuroFrames.length === 0) {
+            const urlsFramesGabriel = [
+                "{% static 'img/arcade/Gemini_Generated_Image_sc6a6usc6a6usc6a.jpg' %}",
+                "{% static 'img/arcade/Gemini_Generated_Image_sc6a6usc6a6usc6a (1).jpg' %}",
+                "{% static 'img/arcade/Gemini_Generated_Image_sc6a6usc6a6usc6a (2).jpg' %}",
+                "{% static 'img/arcade/Gemini_Generated_Image_sc6a6usc6a6usc6a (3).jpg' %}",
+                "{% static 'img/arcade/Gemini_Generated_Image_sc6a6usc6a6usc6a (4).jpg' %}",
+                "{% static 'img/arcade/Gemini_Generated_Image_sc6a6usc6a6usc6a (5).jpg' %}"
+            ];
+            urlsFramesGabriel.forEach((url, idx) => {
+                crearSpriteTransparenteN6_1(url, c => {
+                    spritesNivel6_1.gabrielOscuroFrames[idx] = c;
+                });
+            });
+        }
+    }
+
+    // ============================================================
+    // CONTROL DE MÚSICA (DESBLOQUEO POR TECLA O CLIC)
+    // ============================================================
+    function asegurarAudioNivel6_1() {
+        if (!audioNivel6_1) {
+            audioNivel6_1 = new Audio("{% static 'audio/The_Unmaking_Of_Saints.mp3' %}");
+            audioNivel6_1.loop = true;
+            audioNivel6_1.preload = 'auto';
+        }
+        return audioNivel6_1;
+    }
+
+    function reproducirMusicaNivel6_1() {
+        const audio = asegurarAudioNivel6_1();
+        audio.volume = 0.65;
+        if (audio.paused) {
+            audio.play().catch(() => {});
+        }
+    }
+
+    function detenerMusicaNivel6_1() {
+        if (audioNivel6_1) {
+            audioNivel6_1.pause();
+            audioNivel6_1.currentTime = 0;
+        }
+    }
+
+    window.addEventListener('pointerdown', () => {
+        if (juegoActivo && Number(nivelActual) === 6.1 && jugador.vidas > 0) {
+            reproducirMusicaNivel6_1();
+        }
+    }, true);
+
+    // Controles exclusivos del Nivel 6.1:
+    // [W] -> Salta directo a la Oleada 13 (Encuentro con Gabriel)
+    // [B] -> Usa botiquín (+1 corazón)
+    window.addEventListener('keydown', e => {
+        if (!juegoActivo || Number(nivelActual) !== 6.1 || !estadoNivel6_1) return;
+
+        if (jugador.vidas > 0) {
+            reproducirMusicaNivel6_1();
+        }
+
+        if (e.code === 'KeyW' && !e.repeat) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            invocarJefeGabrielDirectoN6_1();
+            return;
+        }
+
+        if (e.code === 'KeyB' && !e.repeat) {
+            e.preventDefault();
+            usarBotiquinN6_1();
+        }
+    }, true);
+
+    function invocarJefeGabrielDirectoN6_1() {
+        if (!estadoNivel6_1 || estadoNivel6_1.jefeGabriel) return;
+        const ahora = Date.now();
+        estadoNivel6_1.oleadaActual = 13;
+        estadoNivel6_1.pendientesNormales = 0;
+        estadoNivel6_1.enemigosNormales = [];
+        estadoNivel6_1.proyectilesAcido = [];
+        estadoNivel6_1.charcosAcido = [];
+        iniciarEncuentroGabrielN6_1(ahora);
+    }
+
+    function usarBotiquinN6_1() {
+        if (!estadoNivel6_1) return;
+        if (estadoNivel6_1.botiquines <= 0) {
+            estadoNivel6_1.mensajeAlerta = '⚠️ NO TIENES BOTIQUINES GUARDADOS';
+            estadoNivel6_1.mensajeAlertaHasta = Date.now() + 1400;
+            return;
+        }
+        const ahora = Date.now();
+        estadoNivel6_1.botiquines--;
+        if (jugador.vidas < jugador.vidasMax) {
+            jugador.vidas = Math.min(jugador.vidasMax, jugador.vidas + 1);
+            if (typeof actualizarCorazonesUI === 'function') actualizarCorazonesUI();
+        }
+        estadoNivel6_1.destelloCuraJugadorHasta = ahora + 900;
+        estadoNivel6_1.mensajeAlerta = `✚ BOTIQUÍN USADO: +1 CORAZÓN (${estadoNivel6_1.botiquines} RESTANTES)`;
+        estadoNivel6_1.mensajeAlertaHasta = ahora + 1800;
+        actualizarHudNivel6_1();
+    }
+
+    function mantenerEscudoInfinitoN6_1() {
+        if (typeof estadoMarineP2 !== 'undefined') {
+            estadoMarineP2.escudoRoto = false;
+            estadoMarineP2.escudoGolpesRestantes = 999;
+        }
+    }
+
+    function actualizarHudNivel6_1() {
+        const hudEnergia = document.getElementById('cargas-energia');
+        const hudDerecha = document.querySelector('.hud-juego span:last-child');
+        if (!estadoNivel6_1 || Number(nivelActual) !== 6.1) return;
+
+        mantenerEscudoInfinitoN6_1();
+
+        if (hudDerecha) {
+            hudDerecha.textContent = '[FLECHAS] MOVER | [ESPACIO] DISPARAR | [E] ESCUDO (∞) | [B] BOTIQUÍN | [W] JEFE';
+            hudDerecha.style.color = '#cbd5e1';
+        }
+        if (hudEnergia) {
+            const txtEscudo = (typeof estadoMarineP2 !== 'undefined' && estadoMarineP2.escudoActivo)
+                ? '🛡️ ESCUDO ACTIVO (∞)'
+                : '🛡️ [E] INFINITO (∞)';
+            hudEnergia.textContent = `⚔️ TEMPLARIO NEGRO | ✚ [B]: ${estadoNivel6_1.botiquines} | 🔥 AMETRALLADORA PESADA | ${txtEscudo}`;
+            hudEnergia.style.color = '#facc15';
+        }
+    }
+
+    // ============================================================
+    // 1. INICIALIZACIÓN DEL NIVEL 6.1
+    // ============================================================
+    function iniciarNivel6_1() {
+        cancelAnimationFrame(animacionIdNivel6_1);
+        if (typeof intervaloContador !== 'undefined') clearInterval(intervaloContador);
+        textoContador = '';
+
+        juegoActivo = true;
+        nivelActual = 6.1;
+
+        precargarSpritesNivel6_1();
+
+        if (typeof activarPantallaCompletaParte2 === 'function') {
+            activarPantallaCompletaParte2();
+        }
+
+        if (!canvas.width || canvas.width < 100) {
+            canvas.width = canvas.clientWidth || window.innerWidth || 1000;
+        }
+        if (!canvas.height || canvas.height < 100) {
+            canvas.height = canvas.clientHeight || window.innerHeight || 650;
+        }
+
+        const w = canvas.width;
+        const h = canvas.height;
+        const ahora = Date.now();
+
+        jugador.tam = 44;
+        jugador.vidasMax = 10;
+        jugador.vidas = 10;
+        jugador.invulnerableHasta = 0;
+        if (typeof actualizarCorazonesUI === 'function') actualizarCorazonesUI();
+
+        if (typeof estadoMarineP2 !== 'undefined') {
+            estadoMarineP2.escudoActivo = false;
+            estadoMarineP2.escudoGolpesRestantes = 999;
+            estadoMarineP2.escudoRoto = false;
+            estadoMarineP2.disparando = false;
+            estadoMarineP2.anguloTopDown = -Math.PI / 2;
+            estadoMarineP2.balas = [];
+            estadoMarineP2.particulas = [];
+        }
+
+        const anchoEdificio = Math.max(85, Math.min(135, w * 0.085));
+
+        const offsetsCaidos = [
+            { dx: -135, dy: -35, rot: 0.7 },  { dx: -75, dy: -55, rot: -1.1 },
+            { dx: 82, dy: -50, rot: 1.9 },    { dx: 140, dy: -28, rot: -0.5 },
+            { dx: -155, dy: 30, rot: 2.3 },   { dx: -92, dy: 42, rot: 0.3 },
+            { dx: 95, dy: 38, rot: -2.1 },    { dx: 152, dy: 25, rot: 1.2 },
+            { dx: -58, dy: 82, rot: -0.8 },   { dx: 64, dy: 80, rot: 2.6 }
+        ];
+        const soldadosCaidos = offsetsCaidos.map(o => ({
+            x: w / 2 + o.dx,
+            y: h * 0.68 + o.dy,
+            rot: o.rot
+        }));
+
+        const edificiosLaterales = [];
+        for (let ey = -200; ey < h + 240; ey += 180) {
+            edificiosLaterales.push({
+                y: ey,
+                alto: 168,
+                enLlamasIzq: (Math.abs(ey) % 360 === 0),
+                enLlamasDer: (Math.abs(ey + 180) % 360 === 0)
+            });
+        }
+
+        const cochesAvenida = [
+            { x: anchoEdificio + 75, y: h * 0.24, ancho: 40, alto: 72, color: '#475569', enLlamas: true },
+            { x: w - anchoEdificio - 115, y: h * 0.48, ancho: 42, alto: 76, color: '#7f1d1d', enLlamas: false },
+            { x: anchoEdificio + 110, y: h * 0.78, ancho: 40, alto: 72, color: '#3f6212', enLlamas: true }
+        ];
+
+        estadoNivel6_1 = {
+            fase: 'dialogo_inicial',
+            inicioPaso: ahora,
+            anchoEdificio: anchoEdificio,
+            scrollCalleY: 0,
+            velAvanceCalle: 0,
+            oscuridadEscenario: 0,
+            playerX: w / 2 - jugador.tam / 2,
+            playerY: h * 0.68 - jugador.tam / 2,
+            moviendoJugador: false,
+            destelloCuraJugadorHasta: 0,
+            dreadnoughtDerrotado: {
+                x: w / 2,
+                y: h * 0.27,
+                tam: 195
+            },
+            soldadosCaidos: soldadosCaidos,
+            enemigosNormales: [],
+            proyectilesAcido: [],
+            charcosAcido: [],
+            botiquinesCampo: [],
+            botiquines: 2,
+            oleadaActual: 0,
+            totalOleadas: 13,
+            proximaOleadaEn: 0,
+            pendientesNormales: 0,
+            ultimoGoteoSpawn: 0,
+            ultimoSpawnBotiquin: ahora,
+            jefeGabriel: null,
+            estelaEmbestidasGabriel: [],
+            lanzasVoladorasGabriel: [],
+            edificiosLaterales: edificiosLaterales,
+            cochesAvenida: cochesAvenida,
+            mensajeAlerta: '',
+            mensajeAlertaHasta: 0
+        };
+
+        puedeMoverse = false;
+        reproducirMusicaNivel6_1();
+        const tituloEl = document.getElementById('titulo-nivel-activo');
+        if (tituloEl) tituloEl.textContent = 'NIVEL 6.1 — EL JURAMENTO DEL TEMPLARIO';
+        actualizarHudNivel6_1();
+        bucleNivel6_1();
+    }
+
+    // ============================================================
+    // 2. OLEADAS 1 A 12
+    // ============================================================
+    function iniciarSiguienteOleadaN6_1(ahora) {
+        if (!estadoNivel6_1) return;
+        estadoNivel6_1.oleadaActual++;
+        const n = estadoNivel6_1.oleadaActual;
+
+        if (n === 13) {
+            iniciarEncuentroGabrielN6_1(ahora);
+            return;
+        }
+
+        const cantidadEnemigos = (n <= 5) ? 45 : 55;
+        estadoNivel6_1.pendientesNormales = cantidadEnemigos;
+        estadoNivel6_1.proximaOleadaEn = ahora + 16000;
+        estadoNivel6_1.ultimoGoteoSpawn = 0;
+
+        estadoNivel6_1.mensajeAlerta = `⚠️ OLEADA ${n}/13 — ¡${cantidadEnemigos} HORRORES SE APROXIMAN!`;
+        estadoNivel6_1.mensajeAlertaHasta = ahora + 2800;
+        const tituloEl = document.getElementById('titulo-nivel-activo');
+        if (tituloEl) {
+            tituloEl.textContent = `NIVEL 6.1 — OLEADA ${n}/13 (${cantidadEnemigos} ENEMIGOS)`;
+        }
+    }
+
+    function generarEnemigosPendientesN6_1(w, ahora) {
+        if (!estadoNivel6_1 || estadoNivel6_1.pendientesNormales <= 0) return;
+        const minX = estadoNivel6_1.anchoEdificio + 24;
+        const maxX = w - estadoNivel6_1.anchoEdificio - 65;
+
+        if (ahora - estadoNivel6_1.ultimoGoteoSpawn < 180) return;
+        estadoNivel6_1.ultimoGoteoSpawn = ahora;
+
+        const lote = Math.min(8, estadoNivel6_1.pendientesNormales);
+        for (let i = 0; i < lote; i++) {
+            estadoNivel6_1.pendientesNormales--;
+            const esAcido = (estadoNivel6_1.pendientesNormales % 6 === 0);
+            estadoNivel6_1.enemigosNormales.push({
+                x: minX + Math.random() * Math.max(60, maxX - minX),
+                y: -40 - Math.random() * 140,
+                tam: 31,
+                vx: 0,
+                vy: 2.5,
+                vida: 30,
+                vidaMax: 30,
+                flashHasta: 0,
+                pasoAnim: Math.random() * 10,
+                esLanzadorAcido: esAcido,
+                ultimoAcido: ahora + 900 + Math.random() * 1200
+            });
+        }
+    }
+
+    // ============================================================
+    // 3. ENCUENTRO Y COMBATE CON GABRIEL (OLEADA 13 — 50,000 HP)
+    // ============================================================
+    function iniciarEncuentroGabrielN6_1(ahora) {
+        const w = canvas.width;
+        estadoNivel6_1.fase = 'gabriel_intro';
+        estadoNivel6_1.inicioPaso = ahora;
+        estadoNivel6_1.velAvanceCalle = 0;
+        puedeMoverse = false;
+
+        estadoNivel6_1.jefeGabriel = {
+            x: w / 2,
+            y: 185,
+            ancho: 175,
+            alto: 165,
+            radio: 62,
+            vida: 50000,
+            vidaMax: 50000,
+            flashHasta: 0,
+            riendoHasta: 0,
+            formaOscura: false,
+            alasExtendidas: false,
+            jugadorCayoEnTrampa: false,
+            textoRespuesta: '',
+            estadoCombate: 'flotando',
+            inicioEstado: ahora,
+            proximoAtaqueEn: ahora + 1100,
+            embestidasRestantes: 0,
+            embOrigenX: w / 2,
+            embOrigenY: 185,
+            embDestinoX: w / 2,
+            embDestinoY: 185,
+            embGolpeo: false,
+            rayoAngulo: Math.PI / 2,
+            rayoFijado: false,
+            rayoGolpeo: false
+        };
+
+        const tituloEl = document.getElementById('titulo-nivel-activo');
+        if (tituloEl) tituloEl.textContent = 'NIVEL 6.1 — OLEADA 13: EL FALSO ÁNGEL';
+    }
+
+    function elegirSiguienteAtaqueGabrielN6_1(g, nRegCx, nRegCy, w, h, ahora) {
+        const anchoEd = estadoNivel6_1.anchoEdificio;
+        const eleccion = Math.random();
+
+        if (eleccion < 0.38) {
+            g.embestidasRestantes = 5;
+            prepararSiguienteEmbestidaGabrielN6_1(g, nRegCx, nRegCy, anchoEd, w, h, ahora);
+        } else if (eleccion < 0.72) {
+            g.estadoCombate = 'aviso_rayo';
+            g.inicioEstado = ahora;
+            g.alasExtendidas = true;
+            g.rayoFijado = false;
+            g.rayoAngulo = Math.atan2(nRegCy - (g.y - 36), nRegCx - g.x);
+            g.rayoGolpeo = false;
+        } else {
+            g.estadoCombate = 'invocando_lanzas';
+            g.inicioEstado = ahora;
+            g.alasExtendidas = true;
+
+            const totalLanzas = 9;
+            for (let i = 0; i < totalLanzas; i++) {
+                const dirigida = i % 2 === 0;
+                const tx = dirigida
+                    ? Math.max(anchoEd + 35, Math.min(w - anchoEd - 35, nRegCx + (Math.random() - 0.5) * 160))
+                    : anchoEd + 40 + Math.random() * Math.max(80, w - anchoEd * 2 - 80);
+                const ty = dirigida
+                    ? Math.max(95, Math.min(h - 70, nRegCy + (Math.random() - 0.5) * 160))
+                    : 105 + Math.random() * (h - 180);
+
+                const origenX = g.x + (Math.random() - 0.5) * 140;
+                const origenY = g.y - 20;
+                const ang = Math.atan2(ty - origenY, tx - origenX);
+
+                estadoNivel6_1.lanzasVoladorasGabriel.push({
+                    origenX: origenX,
+                    origenY: origenY,
+                    x: origenX,
+                    y: origenY,
+                    destinoX: tx,
+                    destinoY: ty,
+                    angulo: ang,
+                    creadaEn: ahora + i * 85,
+                    volando: false,
+                    impactada: false,
+                    impactoEn: 0,
+                    golpeo: false
+                });
+            }
+        }
+    }
+
+    function prepararSiguienteEmbestidaGabrielN6_1(g, nRegCx, nRegCy, anchoEd, w, h, ahora) {
+        g.estadoCombate = 'aviso_embestida';
+        g.inicioEstado = ahora;
+        g.alasExtendidas = true;
+        g.embOrigenX = g.x;
+        g.embOrigenY = g.y;
+        g.embGolpeo = false;
+
+        const ang = Math.atan2(nRegCy - g.y, nRegCx - g.x);
+        const dist = Math.min(580, Math.max(300, Math.hypot(nRegCx - g.x, nRegCy - g.y) + 140));
+        g.embDestinoX = Math.max(anchoEd + 55, Math.min(w - anchoEd - 55, g.x + Math.cos(ang) * dist));
+        g.embDestinoY = Math.max(105, Math.min(h - 85, g.y + Math.sin(ang) * dist));
+    }
+
+    // ============================================================
+    // 4. DIBUJO DEL ESCENARIO, JUGADOR, LANZAS, PORTAL Y GABRIEL
+    // ============================================================
+    function dibujarEscenarioNivel6_1(w, h, ahora) {
+        const anchoEd = estadoNivel6_1.anchoEdificio;
+        const anchoCalle = w - anchoEd * 2;
+
+        const asfaltoGrad = ctx.createLinearGradient(anchoEd, 0, w - anchoEd, 0);
+        asfaltoGrad.addColorStop(0, '#18181b');
+        asfaltoGrad.addColorStop(0.5, '#27272a');
+        asfaltoGrad.addColorStop(1, '#18181b');
+        ctx.fillStyle = asfaltoGrad;
+        ctx.fillRect(anchoEd, 0, anchoCalle, h);
+
+        const pasoGrid = 48;
+        const offsetGridY = estadoNivel6_1.scrollCalleY % pasoGrid;
+        ctx.strokeStyle = 'rgba(161, 161, 170, 0.11)';
+        ctx.lineWidth = 1.2;
+        for (let gx = anchoEd; gx <= w - anchoEd; gx += pasoGrid) {
+            ctx.beginPath();
+            ctx.moveTo(gx, 0);
+            ctx.lineTo(gx, h);
+            ctx.stroke();
+        }
+        for (let gy = offsetGridY - pasoGrid; gy < h + pasoGrid; gy += pasoGrid) {
+            ctx.beginPath();
+            ctx.moveTo(anchoEd, gy);
+            ctx.lineTo(w - anchoEd, gy);
+            ctx.stroke();
+        }
+
+        const pasoLinea = 96;
+        const offsetLinea = estadoNivel6_1.scrollCalleY % pasoLinea;
+        ctx.fillStyle = 'rgba(234, 179, 8, 0.36)';
+        for (let ly = offsetLinea - pasoLinea; ly < h + pasoLinea; ly += pasoLinea) {
+            ctx.fillRect(w / 2 - 3, ly, 6, 44);
+        }
+
+        estadoNivel6_1.cochesAvenida.forEach(c => {
+            c.y += estadoNivel6_1.velAvanceCalle;
+            if (c.y > h + 110) {
+                c.y = -110;
+                c.x = anchoEd + 50 + Math.random() * Math.max(80, anchoCalle - 140);
+            }
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(c.x + 5, c.y + 5, c.ancho, c.alto);
+            ctx.fillStyle = c.color;
+            ctx.strokeStyle = '#09090b';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.roundRect(c.x, c.y, c.ancho, c.alto, 6);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = '#090d16';
+            ctx.fillRect(c.x + 6, c.y + 14, c.ancho - 12, 15);
+            ctx.fillRect(c.x + 6, c.y + c.alto - 24, c.ancho - 12, 12);
+
+            if (c.enLlamas) {
+                const pulso = Math.sin(ahora / 90 + c.x) * 3;
+                ctx.fillStyle = 'rgba(249, 115, 22, 0.85)';
+                ctx.beginPath();
+                ctx.arc(c.x + c.ancho * 0.5, c.y + 12, 10 + pulso, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        });
+
+        estadoNivel6_1.edificiosLaterales.forEach(ed => {
+            ed.y += estadoNivel6_1.velAvanceCalle;
+            if (ed.y > h + 60) {
+                ed.y -= (estadoNivel6_1.edificiosLaterales.length * 180);
+            }
+
+            [
+                { x: 0, llamas: ed.enLlamasIzq },
+                { x: w - anchoEd, llamas: ed.enLlamasDer }
+            ].forEach(lado => {
+                ctx.fillStyle = '#120f17';
+                ctx.strokeStyle = '#3f3f46';
+                ctx.lineWidth = 2;
+                ctx.fillRect(lado.x, ed.y, anchoEd, ed.alto);
+                ctx.strokeRect(lado.x, ed.y, anchoEd, ed.alto);
+
+                ctx.fillStyle = '#1f1b24';
+                ctx.fillRect(lado.x + 10, ed.y + 12, anchoEd - 20, ed.alto - 24);
+
+                for (let wy = ed.y + 22; wy < ed.y + ed.alto - 24; wy += 32) {
+                    for (let wx = lado.x + 16; wx < lado.x + anchoEd - 22; wx += 28) {
+                        ctx.fillStyle = ((wx + Math.floor(ed.y)) % 3 === 0)
+                            ? 'rgba(234, 88, 12, 0.65)'
+                            : '#09090b';
+                        ctx.fillRect(wx, wy, 14, 18);
+                    }
+                }
+
+                ctx.fillStyle = '#52525b';
+                const aceraX = lado.x === 0 ? anchoEd - 11 : w - anchoEd;
+                ctx.fillRect(aceraX, ed.y, 11, ed.alto);
+            });
+        });
+
+        if (estadoNivel6_1.dreadnoughtDerrotado && estadoNivel6_1.dreadnoughtDerrotado.y < h + 220) {
+            const dr = estadoNivel6_1.dreadnoughtDerrotado;
+            dr.y += estadoNivel6_1.velAvanceCalle;
+
+            ctx.save();
+            ctx.translate(dr.x, dr.y);
+            ctx.rotate(0.28);
+
+            ctx.fillStyle = 'rgba(9, 9, 11, 0.82)';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, dr.tam * 0.62, dr.tam * 0.48, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#1e3a8a';
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.roundRect(-62, -46, 124, 92, 12);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#3b0764';
+            ctx.beginPath();
+            ctx.arc(28, -18, 26, 0, Math.PI * 2);
+            ctx.arc(-32, 22, 22, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+            ctx.beginPath();
+            ctx.arc(Math.sin(ahora / 180) * 10, -25, 24, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        estadoNivel6_1.soldadosCaidos.forEach(sc => {
+            if (sc.y > h + 80) return;
+            sc.y += estadoNivel6_1.velAvanceCalle;
+
+            ctx.save();
+            ctx.translate(sc.x, sc.y);
+            ctx.rotate(sc.rot);
+
+            ctx.fillStyle = 'rgba(127, 29, 29, 0.65)';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 18, 13, 0.3, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#365314';
+            ctx.strokeStyle = '#1a2e05';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(-12, -7, 24, 14, 4);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#3f6212';
+            ctx.beginPath();
+            ctx.arc(11, 0, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        if (estadoNivel6_1.oscuridadEscenario > 0) {
+            ctx.save();
+            ctx.fillStyle = `rgba(3, 2, 8, ${estadoNivel6_1.oscuridadEscenario})`;
+            ctx.fillRect(0, 0, w, h);
+            ctx.restore();
+        }
+    }
+
+    function dibujarJugadorTemplarioNegroN6_1(screenX, screenY, ahora) {
+        const parpadeo = ahora < jugador.invulnerableHasta && Math.floor(ahora / 90) % 2 === 0;
+        if (parpadeo) return;
+
+        mantenerEscudoInfinitoN6_1();
+        const cx = screenX + jugador.tam / 2;
+        const cy = screenY + jugador.tam / 2;
+        const radio = jugador.tam * 0.56;
+        const escudoActivo = (typeof estadoMarineP2 !== 'undefined') && estadoMarineP2.escudoActivo;
+        const disparandoAhora = (typeof estadoMarineP2 !== 'undefined') && estadoMarineP2.disparando && !escudoActivo;
+        const angulo = (typeof estadoMarineP2 !== 'undefined') ? estadoMarineP2.anguloTopDown : -Math.PI / 2;
+
+        const moviendo = estadoNivel6_1.moviendoJugador;
+        const pasoBob = moviendo ? Math.abs(Math.sin(ahora / 75)) * 4 : Math.sin(ahora / 260) * 1.2;
+        const pasoTilt = moviendo ? Math.sin(ahora / 75) * 0.09 : 0;
+        const retrocesoDisparo = disparandoAhora ? Math.sin(ahora / 28) * 2.2 : 0;
+
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.imageSmoothingEnabled = false;
+
+        if (ahora < estadoNivel6_1.destelloCuraJugadorHasta) {
+            ctx.strokeStyle = '#4ade80';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(0, 0, radio * 1.55, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';
+        ctx.beginPath();
+        ctx.ellipse(0, radio * 0.88, radio * 0.78, radio * 0.34, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (spritesNivel6_1.jugador) {
+            ctx.save();
+            ctx.translate(-Math.cos(angulo) * retrocesoDisparo, -pasoBob - Math.sin(angulo) * retrocesoDisparo);
+            ctx.rotate(pasoTilt);
+            const spr = spritesNivel6_1.jugador;
+            const altoSpr = jugador.tam * 1.32;
+            const anchoSpr = altoSpr * (spr.width / spr.height);
+            ctx.drawImage(spr, -anchoSpr / 2, -altoSpr / 2, anchoSpr, altoSpr);
+            ctx.restore();
+        } else {
+            ctx.fillStyle = '#18181b';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, radio, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        if (!escudoActivo) {
+            ctx.save();
+            ctx.rotate(angulo);
+            ctx.fillStyle = '#facc15';
+            ctx.beginPath();
+            ctx.moveTo(radio * 1.25, 0);
+            ctx.lineTo(radio * 0.92, -5);
+            ctx.lineTo(radio * 0.92, 5);
+            ctx.closePath();
+            ctx.fill();
+
+            if (disparandoAhora && Math.floor(ahora / 35) % 2 === 0) {
+                ctx.fillStyle = '#fef08a';
+                ctx.beginPath();
+                ctx.arc(radio * 1.38, 0, 11, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        if (escudoActivo) {
+            ctx.save();
+            ctx.rotate(angulo);
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.arc(0, 0, radio * 1.18, -Math.PI * 0.46, Math.PI * 0.46);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, radio * 1.24, -Math.PI * 0.42, Math.PI * 0.42);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        ctx.restore();
+    }
+
+    function dibujarPortalGabrielN6_1(x, y, progresoApertura, ahora) {
+        if (progresoApertura <= 0) return;
+        const radioX = 76 * progresoApertura;
+        const radioY = 112 * progresoApertura;
+
+        ctx.save();
+        ctx.translate(x, y);
+
+        // Aura violeta exterior del portal
+        const grad = ctx.createRadialGradient(0, 0, radioX * 0.15, 0, 0, radioY * 1.25);
+        grad.addColorStop(0, 'rgba(3, 2, 8, 0.98)');
+        grad.addColorStop(0.65, 'rgba(88, 28, 135, 0.85)');
+        grad.addColorStop(0.88, 'rgba(216, 180, 254, 0.75)');
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, radioX * 1.25, radioY * 1.25, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Núcleo oscuro giratorio
+        ctx.fillStyle = '#030208';
+        ctx.strokeStyle = '#e9d5ff';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, radioX, radioY, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Ojos blancos flotando dentro del abismo del portal
+        for (let i = 0; i < 6; i++) {
+            const ang = (ahora / 550) + i * (Math.PI / 3);
+            const ox = Math.cos(ang) * (radioX * 0.52);
+            const oy = Math.sin(ang) * (radioY * 0.52);
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(ox, oy, 3 * progresoApertura, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+
+    function dibujarGabrielN6_1(g, ahora, escalaPortal = 1, opacidad = 1) {
+        const golpeado = ahora < g.flashHasta;
+        const estaRiendo = ahora < g.riendoHasta || estadoNivel6_1.fase === 'gabriel_derrota_portal';
+        const flotarY = Math.sin(ahora / 210) * 8;
+
+        // Dibuja estela oscura detrás de Gabriel cuando embiste rápido
+        estadoNivel6_1.estelaEmbestidasGabriel = estadoNivel6_1.estelaEmbestidasGabriel.filter(est => {
+            const edad = ahora - est.creadaEn;
+            if (edad > 220) return false;
+            const alpha = (1 - edad / 220) * 0.45;
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.imageSmoothingEnabled = false;
+            if (est.sprite) {
+                ctx.drawImage(est.sprite, est.x - est.w / 2, est.y - est.h / 2, est.w, est.h);
+            }
+            ctx.restore();
+            return true;
+        });
+
+        ctx.save();
+        ctx.globalAlpha = opacidad;
+        ctx.translate(g.x, g.y + flotarY);
+        ctx.scale(escalaPortal, escalaPortal);
+        ctx.imageSmoothingEnabled = false;
+
+        // Sombra en el suelo (sin cubo)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';
+        ctx.beginPath();
+        ctx.ellipse(0, g.alto * 0.52 - flotarY * 0.4, 52 - flotarY * 0.6, 16, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        let spriteActual = null;
+        if (g.formaOscura) {
+            if (estaRiendo && spritesNivel6_1.gabrielRiendo) {
+                spriteActual = spritesNivel6_1.gabrielRiendo;
+            } else {
+                const framesCargados = spritesNivel6_1.gabrielOscuroFrames.filter(Boolean);
+                if (framesCargados.length > 0) {
+                    const msPorFrame = (g.estadoCombate !== 'flotando') ? 70 : 115;
+                    const idxFrame = Math.floor(ahora / msPorFrame) % framesCargados.length;
+                    spriteActual = framesCargados[idxFrame];
+                }
+            }
+        } else {
+            spriteActual = spritesNivel6_1.gabrielCalmado;
+        }
+
+        if (spriteActual) {
+            const altoDibujo = g.formaOscura ? g.alto * 1.18 : g.alto;
+            const anchoDibujo = altoDibujo * (spriteActual.width / spriteActual.height);
+            // Vibración burlona leve cuando se ríe
+            const shakeRisaX = estaRiendo ? Math.sin(ahora / 35) * 3 : 0;
+            ctx.drawImage(spriteActual, -anchoDibujo / 2 + shakeRisaX, -altoDibujo / 2, anchoDibujo, altoDibujo);
+
+            if (g.estadoCombate === 'embistiendo' && Math.floor(ahora / 25) % 2 === 0) {
+                estadoNivel6_1.estelaEmbestidasGabriel.push({
+                    sprite: spriteActual,
+                    x: g.x,
+                    y: g.y + flotarY,
+                    w: anchoDibujo,
+                    h: altoDibujo,
+                    creadaEn: ahora
+                });
+            }
+
+            if (golpeado) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.42)';
+                ctx.beginPath();
+                ctx.arc(0, 0, g.radio, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        } else {
+            ctx.fillStyle = g.formaOscura ? '#09090b' : '#e2e8f0';
+            ctx.beginPath();
+            ctx.arc(0, 0, g.radio, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        if (g.formaOscura && (g.estadoCombate === 'aviso_rayo' || g.estadoCombate === 'disparando_rayo')) {
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(-6, -42, 4.5, 0, Math.PI * 2);
+            ctx.arc(6, -42, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+
+    function dibujarBarraVidaGabrielN6_1(g, w, anchoEd) {
+        const barW = Math.min(560, w - anchoEd * 2 - 40);
+        const barX = (w - barW) / 2;
+        const barY = 92;
+        const pct = Math.max(0, Math.min(1, g.vida / g.vidaMax));
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(9, 6, 18, 0.92)';
+        ctx.strokeStyle = '#c084fc';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(barX - 8, barY - 22, barW + 16, 38, 8);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#1f1633';
+        ctx.fillRect(barX, barY, barW, 10);
+
+        const gradBar = ctx.createLinearGradient(barX, barY, barX + barW, barY);
+        gradBar.addColorStop(0, '#a855f7');
+        gradBar.addColorStop(0.5, '#e879f9');
+        gradBar.addColorStop(1, '#f43f5e');
+        ctx.fillStyle = gradBar;
+        ctx.fillRect(barX, barY, barW * pct, 10);
+
+        ctx.font = 'bold 12px "Courier New", monospace';
+        ctx.fillStyle = '#f8fafc';
+        ctx.textAlign = 'center';
+        ctx.fillText(`GABRIEL — ${Math.max(0, Math.ceil(g.vida)).toLocaleString()} / 50,000 HP`, w / 2, barY - 6);
+        ctx.restore();
+    }
+
+    function dibujarLanzaSagradaVoladoraN6_1(x, y, angulo, escala = 1) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angulo + Math.PI / 2);
+        ctx.scale(escala, escala);
+
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.moveTo(0, 38);
+        ctx.lineTo(0, -24);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#eab308';
+        ctx.lineWidth = 4.5;
+        ctx.beginPath();
+        ctx.moveTo(0, 22);
+        ctx.lineTo(0, 4);
+        ctx.moveTo(0, -18);
+        ctx.lineTo(0, -24);
+        ctx.stroke();
+
+        ctx.fillStyle = '#fef3c7';
+        ctx.strokeStyle = '#ca8a04';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(0, -48);
+        ctx.lineTo(-7, -24);
+        ctx.lineTo(0, -20);
+        ctx.lineTo(7, -24);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    function dibujarCajaDialogoN6_1(w, hablante, colorNombre, texto, subtextoExtra = '') {
+        ctx.save();
+        const boxW = Math.min(840, w * 0.80);
+        const boxH = 148;
+        const boxX = (w - boxW) / 2;
+        const boxY = 82;
+
+        ctx.fillStyle = 'rgba(7, 6, 14, 0.95)';
+        ctx.strokeStyle = colorNombre;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.roundRect(boxX, boxY, boxW, boxH, 12);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = 'bold 15px "Courier New", monospace';
+        ctx.fillStyle = colorNombre;
+        ctx.textAlign = 'left';
+        ctx.fillText(hablante, boxX + 22, boxY + 28);
+
+        if (subtextoExtra) {
+            ctx.textAlign = 'right';
+            ctx.fillStyle = '#facc15';
+            ctx.fillText(subtextoExtra, boxX + boxW - 22, boxY + 28);
+            ctx.textAlign = 'left';
+        }
+
+        ctx.font = '14px "Courier New", monospace';
+        ctx.fillStyle = '#f8fafc';
+        const palabras = texto.split(' ');
+        let linea = '';
+        let ly = boxY + 54;
+        const maxAncho = boxW - 44;
+
+        palabras.forEach(pal => {
+            const prueba = linea + pal + ' ';
+            if (ctx.measureText(prueba).width > maxAncho) {
+                ctx.fillText(linea.trim(), boxX + 22, ly);
+                linea = pal + ' ';
+                ly += 21;
+            } else {
+                linea = prueba;
+            }
+        });
+        if (linea.trim()) {
+            ctx.fillText(linea.trim(), boxX + 22, ly);
+        }
+        ctx.restore();
+    }
+
+    // ============================================================
+    // 5. BUCLE PRINCIPAL DEL NIVEL 6.1
+    // ============================================================
+    function bucleNivel6_1() {
+        if (jugador.vidas > 0 && audioNivel6_1 && audioNivel6_1.paused && !audioNivel6_1.ended) {
+    audioNivel6_1.play().catch(() => {});
+}
+        if (!juegoActivo || Number(nivelActual) !== 6.1 || !estadoNivel6_1) return;
+
+        mantenerEscudoInfinitoN6_1();
+        actualizarHudNivel6_1();
+
+        const ahora = Date.now();
+        const w = canvas.width;
+        const h = canvas.height;
+        const anchoEd = estadoNivel6_1.anchoEdificio;
+
+        estadoNivel6_1.scrollCalleY += estadoNivel6_1.velAvanceCalle;
+        dibujarEscenarioNivel6_1(w, h, ahora);
+
+        if (estadoNivel6_1.fase === 'dialogo_inicial') {
+            dibujarJugadorTemplarioNegroN6_1(estadoNivel6_1.playerX, estadoNivel6_1.playerY, ahora);
+            dibujarCajaDialogoN6_1(
+                w,
+                'TEMPLARIO NEGRO (TÚ)',
+                '#f8fafc',
+                '«Lo siento hermanos, es por el Imperio.»'
+            );
+
+            if (ahora - estadoNivel6_1.inicioPaso >= 3200) {
+                estadoNivel6_1.fase = 'oleadas';
+                estadoNivel6_1.velAvanceCalle = 2.5;
+                estadoNivel6_1.ultimoSpawnBotiquin = ahora;
+                puedeMoverse = true;
+                iniciarSiguienteOleadaN6_1(ahora);
+            }
+
+            animacionIdNivel6_1 = requestAnimationFrame(bucleNivel6_1);
+            return;
+        }
+
+        estadoNivel6_1.moviendoJugador = false;
+        if (puedeMoverse && jugador.vidas > 0 && estadoNivel6_1.fase !== 'victoria' && estadoNivel6_1.fase !== 'gabriel_derrota_portal') {
+            let mx = 0;
+            let my = 0;
+            if (teclas.ArrowLeft || (typeof teclasExtraP2 !== 'undefined' && teclasExtraP2.KeyA)) mx -= 1;
+            if (teclas.ArrowRight || (typeof teclasExtraP2 !== 'undefined' && teclasExtraP2.KeyD)) mx += 1;
+            if (teclas.ArrowUp) my -= 1;
+            if (teclas.ArrowDown || (typeof teclasExtraP2 !== 'undefined' && teclasExtraP2.KeyS)) my += 1;
+
+            if (mx !== 0 || my !== 0) {
+                estadoNivel6_1.moviendoJugador = true;
+                const norm = Math.hypot(mx, my);
+                estadoNivel6_1.playerX += (mx / norm) * 6.8;
+                estadoNivel6_1.playerY += (my / norm) * 6.8;
+            }
+
+            estadoNivel6_1.playerX = Math.max(anchoEd + 10, Math.min(w - anchoEd - jugador.tam - 10, estadoNivel6_1.playerX));
+            estadoNivel6_1.playerY = Math.max(60, Math.min(h - jugador.tam - 60, estadoNivel6_1.playerY));
+        }
+
+        const nRegCx = estadoNivel6_1.playerX + jugador.tam / 2;
+        const nRegCy = estadoNivel6_1.playerY + jugador.tam / 2;
+
+        if (estadoNivel6_1.fase === 'oleadas' && jugador.vidas > 0) {
+            if (estadoNivel6_1.oleadaActual < 12 && ahora >= estadoNivel6_1.proximaOleadaEn) {
+                iniciarSiguienteOleadaN6_1(ahora);
+            }
+            generarEnemigosPendientesN6_1(w, ahora);
+
+            const listoParaOleada13 =
+                estadoNivel6_1.oleadaActual >= 12 &&
+                estadoNivel6_1.pendientesNormales === 0 &&
+                estadoNivel6_1.enemigosNormales.length === 0;
+
+            if (listoParaOleada13) {
+                iniciarSiguienteOleadaN6_1(ahora);
+            }
+
+            if (ahora - estadoNivel6_1.ultimoSpawnBotiquin >= 11500 && estadoNivel6_1.botiquinesCampo.length < 2) {
+                estadoNivel6_1.ultimoSpawnBotiquin = ahora;
+                estadoNivel6_1.botiquinesCampo.push({
+                    x: anchoEd + 45 + Math.random() * Math.max(80, w - anchoEd * 2 - 90),
+                    y: -30,
+                    radio: 15
+                });
+            }
+        }
+
+        estadoNivel6_1.botiquinesCampo = estadoNivel6_1.botiquinesCampo.filter(bot => {
+            bot.y += Math.max(1.2, estadoNivel6_1.velAvanceCalle);
+            if (bot.y > h + 40) return false;
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(74, 222, 128, 0.25)';
+            ctx.beginPath();
+            ctx.arc(bot.x, bot.y, bot.radio + 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#f8fafc';
+            ctx.strokeStyle = '#16a34a';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(bot.x - 12, bot.y - 9, 24, 18, 4);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = '#dc2626';
+            ctx.fillRect(bot.x - 2.5, bot.y - 6, 5, 12);
+            ctx.fillRect(bot.x - 6, bot.y - 2.5, 12, 5);
+            ctx.restore();
+
+            if (Math.hypot(nRegCx - bot.x, nRegCy - bot.y) <= bot.radio + jugador.tam * 0.45) {
+                estadoNivel6_1.botiquines++;
+                estadoNivel6_1.mensajeAlerta = `✚ BOTIQUÍN RECOGIDO (${estadoNivel6_1.botiquines} GUARDADOS — TECLA [B])`;
+                estadoNivel6_1.mensajeAlertaHasta = ahora + 1800;
+                actualizarHudNivel6_1();
+                return false;
+            }
+            return true;
+        });
+
+        estadoNivel6_1.charcosAcido = estadoNivel6_1.charcosAcido.filter(ch => {
+            ch.y += estadoNivel6_1.velAvanceCalle;
+            if (ahora >= ch.expiraEn || ch.y > h + 40) return false;
+            ctx.fillStyle = 'rgba(132, 204, 22, 0.55)';
+            ctx.beginPath();
+            ctx.arc(ch.x, ch.y, ch.radio, 0, Math.PI * 2);
+            ctx.fill();
+            return true;
+        });
+
+        estadoNivel6_1.proyectilesAcido = estadoNivel6_1.proyectilesAcido.filter(ac => {
+            ac.x += ac.vx;
+            ac.y += ac.vy;
+            ac.vida--;
+
+            ctx.fillStyle = '#a3e635';
+            ctx.beginPath();
+            ctx.arc(ac.x, ac.y, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            if (Math.hypot(ac.x - nRegCx, ac.y - nRegCy) <= jugador.tam * 0.45) {
+                if (typeof estadoMarineP2 !== 'undefined' && estadoMarineP2.escudoActivo) {
+                    mantenerEscudoInfinitoN6_1();
+                } else {
+                    recibirDanioJugadorNivel6_1(1);
+                }
+                return false;
+            }
+            if (ac.vida <= 0) {
+                estadoNivel6_1.charcosAcido.push({ x: ac.x, y: ac.y, radio: 18, expiraEn: ahora + 2200 });
+                return false;
+            }
+            return ac.y < h + 40;
+        });
+
+        let objX = null;
+        let objY = null;
+        let distMin = Infinity;
+
+        if (estadoNivel6_1.jefeGabriel && estadoNivel6_1.fase === 'combate_gabriel') {
+            objX = estadoNivel6_1.jefeGabriel.x;
+            objY = estadoNivel6_1.jefeGabriel.y;
+            distMin = Math.hypot(objX - nRegCx, objY - nRegCy);
+        }
+        estadoNivel6_1.enemigosNormales.forEach(en => {
+            const ex = en.x + en.tam / 2;
+            const ey = en.y + en.tam / 2;
+            const d = Math.hypot(ex - nRegCx, ey - nRegCy);
+            if (d < distMin) {
+                distMin = d;
+                objX = ex;
+                objY = ey;
+            }
+        });
+
+        if (objX !== null && typeof estadoMarineP2 !== 'undefined') {
+            estadoMarineP2.anguloTopDown = Math.atan2(objY - nRegCy, objX - nRegCx);
+        }
+
+        if (puedeMoverse && jugador.vidas > 0 &&
+            (estadoNivel6_1.fase === 'oleadas' || estadoNivel6_1.fase === 'combate_gabriel')) {
+            if (typeof estadoMarineP2 !== 'undefined' && estadoMarineP2.disparando && !estadoMarineP2.escudoActivo &&
+                ahora - estadoMarineP2.ultimoDisparo >= 50) {
+                estadoMarineP2.ultimoDisparo = ahora;
+                const ang = estadoMarineP2.anguloTopDown;
+                estadoMarineP2.balas.push({
+                    x: nRegCx + Math.cos(ang) * 26,
+                    y: nRegCy + Math.sin(ang) * 26,
+                    vx: Math.cos(ang) * 21,
+                    vy: Math.sin(ang) * 21,
+                    danioNormal: 15,
+                    danioJefe: 20
+                });
+            }
+        }
+
+        estadoNivel6_1.enemigosNormales.forEach(en => {
+            const ex = en.x + en.tam / 2;
+            const ey = en.y + en.tam / 2;
+            const dx = nRegCx - ex;
+            const dy = nRegCy - ey;
+            const d = Math.hypot(dx, dy) || 1;
+            const vel = en.esLanzadorAcido ? 2.2 : 3.0;
+
+            if (en.esLanzadorAcido && d < 280 && d > 130) {
+                if (ahora - en.ultimoAcido >= 2800) {
+                    en.ultimoAcido = ahora;
+                    estadoNivel6_1.proyectilesAcido.push({
+                        x: ex,
+                        y: ey,
+                        vx: (dx / d) * 6.5,
+                        vy: (dy / d) * 6.5,
+                        vida: 45
+                    });
+                }
+            } else {
+                en.vx = (dx / d) * vel;
+                en.vy = (dy / d) * vel;
+                en.x += en.vx;
+                en.y += en.vy;
+            }
+
+            if (d < (en.tam * 0.42 + jugador.tam * 0.42)) {
+                if (typeof estadoMarineP2 !== 'undefined' && estadoMarineP2.escudoActivo) {
+                    mantenerEscudoInfinitoN6_1();
+                    en.x -= (dx / d) * 26;
+                    en.y -= (dy / d) * 26;
+                } else {
+                    recibirDanioJugadorNivel6_1(1);
+                }
+            }
+
+            if (typeof dibujarEnemigoTiranidoN5 === 'function') {
+                dibujarEnemigoTiranidoN5(en, ahora, true);
+            } else {
+                ctx.fillStyle = '#9333ea';
+                ctx.fillRect(en.x, en.y, en.tam, en.tam);
+            }
+        });
+
+        if (estadoNivel6_1.jefeGabriel) {
+            const g = estadoNivel6_1.jefeGabriel;
+
+            if (estadoNivel6_1.fase === 'gabriel_intro') {
+                dibujarGabrielN6_1(g, ahora);
+                dibujarCajaDialogoN6_1(
+                    w,
+                    'GABRIEL (ALAS BLANCAS)',
+                    '#f8fafc',
+                    '«Vaya, impresionante, lograste derrotar a mis hermanos... No estoy enojado, solo fascinado que una cosa asquerosa como tú haya derrotado a mis 2 hermanos; incluso con su poder juntos no te lograron ganar. Yo no vengo a pelear, ven, acércate.»'
+                );
+
+                if (ahora - estadoNivel6_1.inicioPaso >= 7500) {
+                    estadoNivel6_1.fase = 'gabriel_trampa';
+                    estadoNivel6_1.inicioPaso = ahora;
+                    puedeMoverse = true;
+                }
+            } else if (estadoNivel6_1.fase === 'gabriel_trampa') {
+                const segRestantes = Math.max(0, Math.ceil((7000 - (ahora - estadoNivel6_1.inicioPaso)) / 1000));
+
+                ctx.save();
+                ctx.strokeStyle = 'rgba(250, 204, 21, 0.65)';
+                ctx.lineWidth = 2.5;
+                ctx.setLineDash([8, 6]);
+                ctx.beginPath();
+                ctx.arc(g.x, g.y, 115, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+
+                dibujarGabrielN6_1(g, ahora);
+                dibujarCajaDialogoN6_1(
+                    w,
+                    'GABRIEL',
+                    '#facc15',
+                    '«Ven, acércate... no tengas miedo.»',
+                    `DECISIÓN: ${segRestantes}s`
+                );
+
+                const distAlJefe = Math.hypot(nRegCx - g.x, nRegCy - g.y);
+                if (distAlJefe <= 115) {
+                    g.jugadorCayoEnTrampa = true;
+                    g.formaOscura = true;
+                    g.riendoHasta = ahora + 3800;
+                    g.textoRespuesta = '«Lindura, en serio eres muy ingenuo, qué fácil es engañar a los seres humanos.»';
+                    estadoNivel6_1.fase = 'gabriel_respuesta';
+                    estadoNivel6_1.inicioPaso = ahora;
+                    puedeMoverse = false;
+                    recibirDanioJugadorNivel6_1(5, true);
+                } else if (ahora - estadoNivel6_1.inicioPaso >= 7000) {
+                    g.jugadorCayoEnTrampa = false;
+                    g.formaOscura = true;
+                    g.textoRespuesta = '«Es una pena, pensé que serías más ingenuo.»';
+                    estadoNivel6_1.fase = 'gabriel_respuesta';
+                    estadoNivel6_1.inicioPaso = ahora;
+                    puedeMoverse = false;
+                }
+            } else if (estadoNivel6_1.fase === 'gabriel_respuesta') {
+                estadoNivel6_1.oscuridadEscenario = Math.min(0.68, estadoNivel6_1.oscuridadEscenario + 0.015);
+                dibujarGabrielN6_1(g, ahora);
+                dibujarCajaDialogoN6_1(
+                    w,
+                    'GABRIEL (FORMA OSCURA)',
+                    '#c084fc',
+                    g.textoRespuesta
+                );
+
+                if (ahora - estadoNivel6_1.inicioPaso >= 3800) {
+                    estadoNivel6_1.fase = 'combate_gabriel';
+                    estadoNivel6_1.oscuridadEscenario = 0.68;
+                    g.estadoCombate = 'flotando';
+                    g.inicioEstado = ahora;
+                    g.proximoAtaqueEn = ahora + 850;
+                    puedeMoverse = true;
+                    const tituloEl = document.getElementById('titulo-nivel-activo');
+                    if (tituloEl) tituloEl.textContent = 'NIVEL 6.1 — COMBATE FINAL: GABRIEL (50,000 HP)';
+                }
+            } else if (estadoNivel6_1.fase === 'combate_gabriel') {
+                estadoNivel6_1.oscuridadEscenario = 0.68;
+
+                if (puedeMoverse && jugador.vidas > 0) {
+                    if (g.estadoCombate === 'flotando') {
+                        g.alasExtendidas = false;
+                        g.x = w / 2 + Math.sin(ahora / 580) * ((w - anchoEd * 2) * 0.30);
+                        g.y = 225 + Math.cos(ahora / 430) * 32;
+
+                        if (ahora >= g.proximoAtaqueEn) {
+                            elegirSiguienteAtaqueGabrielN6_1(g, nRegCx, nRegCy, w, h, ahora);
+                        }
+                    } else if (g.estadoCombate === 'aviso_embestida') {
+                        const prog = Math.min(1, (ahora - g.inicioEstado) / 460);
+                        ctx.save();
+                        ctx.strokeStyle = `rgba(239, 68, 68, ${0.4 + prog * 0.45})`;
+                        ctx.lineWidth = 54;
+                        ctx.lineCap = 'round';
+                        ctx.beginPath();
+                        ctx.moveTo(g.embOrigenX, g.embOrigenY);
+                        ctx.lineTo(g.embDestinoX, g.embDestinoY);
+                        ctx.stroke();
+                        ctx.restore();
+
+                        if (prog >= 1) {
+                            g.estadoCombate = 'embistiendo';
+                            g.inicioEstado = ahora;
+                        }
+                    } else if (g.estadoCombate === 'embistiendo') {
+                        const tEmb = Math.min(1, (ahora - g.inicioEstado) / 125);
+                        g.x = g.embOrigenX + (g.embDestinoX - g.embOrigenX) * tEmb;
+                        g.y = g.embOrigenY + (g.embDestinoY - g.embOrigenY) * tEmb;
+
+                        if (!g.embGolpeo && Math.hypot(nRegCx - g.x, nRegCy - g.y) <= g.radio + jugador.tam * 0.45) {
+                            g.embGolpeo = true;
+                            if (typeof estadoMarineP2 !== 'undefined' && estadoMarineP2.escudoActivo) {
+                                mantenerEscudoInfinitoN6_1();
+                            } else {
+                                recibirDanioJugadorNivel6_1(2);
+                            }
+                        }
+
+                        if (tEmb >= 1) {
+                            g.embestidasRestantes--;
+                            if (g.embestidasRestantes > 0) {
+                                prepararSiguienteEmbestidaGabrielN6_1(g, nRegCx, nRegCy, anchoEd, w, h, ahora);
+                            } else {
+                                g.estadoCombate = 'flotando';
+                                g.alasExtendidas = false;
+                                g.proximoAtaqueEn = ahora + 950;
+                            }
+                        }
+                    } else if (g.estadoCombate === 'aviso_rayo') {
+                        const transcurridoRayo = ahora - g.inicioEstado;
+                        const ojoX = g.x;
+                        const ojoY = g.y - 38;
+
+                        if (transcurridoRayo < 750) {
+                            g.rayoAngulo = Math.atan2(nRegCy - ojoY, nRegCx - ojoX);
+                            g.rayoFijado = false;
+                        } else {
+                            g.rayoFijado = true;
+                        }
+
+                        const finX = ojoX + Math.cos(g.rayoAngulo) * 1400;
+                        const finY = ojoY + Math.sin(g.rayoAngulo) * 1400;
+
+                        ctx.save();
+                        if (g.rayoFijado) {
+                            ctx.strokeStyle = '#ef4444';
+                            ctx.lineWidth = 8;
+                            ctx.beginPath();
+                            ctx.moveTo(ojoX, ojoY);
+                            ctx.lineTo(finX, finY);
+                            ctx.stroke();
+
+                            ctx.strokeStyle = '#ffffff';
+                            ctx.lineWidth = 2.5;
+                            ctx.beginPath();
+                            ctx.moveTo(ojoX, ojoY);
+                            ctx.lineTo(finX, finY);
+                            ctx.stroke();
+                        } else {
+                            ctx.strokeStyle = 'rgba(250, 204, 21, 0.75)';
+                            ctx.lineWidth = 3.5;
+                            ctx.setLineDash([12, 8]);
+                            ctx.beginPath();
+                            ctx.moveTo(ojoX, ojoY);
+                            ctx.lineTo(finX, finY);
+                            ctx.stroke();
+                        }
+                        ctx.restore();
+
+                        if (transcurridoRayo >= 1200) {
+                            g.estadoCombate = 'disparando_rayo';
+                            g.inicioEstado = ahora;
+                        }
+                    } else if (g.estadoCombate === 'disparando_rayo') {
+                        const prog = Math.min(1, (ahora - g.inicioEstado) / 420);
+                        const ojoX = g.x;
+                        const ojoY = g.y - 38;
+                        const finX = ojoX + Math.cos(g.rayoAngulo) * 1400;
+                        const finY = ojoY + Math.sin(g.rayoAngulo) * 1400;
+
+                        ctx.save();
+                        ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 44;
+                        ctx.lineCap = 'round';
+                        ctx.beginPath();
+                        ctx.moveTo(ojoX, ojoY);
+                        ctx.lineTo(finX, finY);
+                        ctx.stroke();
+
+                        ctx.strokeStyle = '#030305';
+                        ctx.lineWidth = 32;
+                        ctx.beginPath();
+                        ctx.moveTo(ojoX, ojoY);
+                        ctx.lineTo(finX, finY);
+                        ctx.stroke();
+                        ctx.restore();
+
+                        if (!g.rayoGolpeo) {
+                            const distRayo = distanciaPuntoASegmentoN6_1(nRegCx, nRegCy, ojoX, ojoY, finX, finY);
+                            if (distRayo <= 22 + jugador.tam * 0.35) {
+                                g.rayoGolpeo = true;
+                                if (typeof estadoMarineP2 !== 'undefined' && estadoMarineP2.escudoActivo) {
+                                    mantenerEscudoInfinitoN6_1();
+                                } else {
+                                    recibirDanioJugadorNivel6_1(3);
+                                }
+                            }
+                        }
+
+                        if (prog >= 1) {
+                            g.estadoCombate = 'flotando';
+                            g.alasExtendidas = false;
+                            g.proximoAtaqueEn = ahora + 1100;
+                        }
+                    } else if (g.estadoCombate === 'invocando_lanzas') {
+                        if (ahora - g.inicioEstado >= 1300) {
+                            g.estadoCombate = 'flotando';
+                            g.alasExtendidas = false;
+                            g.proximoAtaqueEn = ahora + 1100;
+                        }
+                    }
+                }
+
+                dibujarGabrielN6_1(g, ahora);
+                dibujarBarraVidaGabrielN6_1(g, w, anchoEd);
+            } else if (estadoNivel6_1.fase === 'gabriel_derrota_portal') {
+                // Secuencia donde Gabriel abre un portal, se despide y se va sin explotar
+                const tSecuencia = ahora - estadoNivel6_1.inicioPaso;
+                const aperturaPortal = Math.min(1, tSecuencia / 900);
+
+                // Empieza a entrar al portal a partir de los 3.2 segundos
+                let escalaGabriel = 1;
+                let opacidadGabriel = 1;
+                if (tSecuencia > 3200) {
+                    const tEntrada = Math.min(1, (tSecuencia - 3200) / 1400);
+                    escalaGabriel = Math.max(0.05, 1 - tEntrada);
+                    opacidadGabriel = Math.max(0, 1 - tEntrada);
+                }
+
+                // Cierre del portal después de que Gabriel cruza
+                let cierrePortal = aperturaPortal;
+                if (tSecuencia > 4500) {
+                    cierrePortal = Math.max(0, 1 - (tSecuencia - 4500) / 700);
+                }
+
+                dibujarPortalGabrielN6_1(g.x, g.y, cierrePortal, ahora);
+                if (opacidadGabriel > 0.02) {
+                    dibujarGabrielN6_1(g, ahora, escalaGabriel, opacidadGabriel);
+                }
+
+                dibujarCajaDialogoN6_1(
+                    w,
+                    'GABRIEL',
+                    '#e879f9',
+                    '«Adiós soldadito, me gustó jugar contigo... te estaré observando.»'
+                );
+
+                if (tSecuencia >= 5200) {
+                    estadoNivel6_1.jefeGabriel = null;
+                    estadoNivel6_1.fase = 'victoria';
+                    estadoNivel6_1.oscuridadEscenario = 0;
+                    estadoNivel6_1.lanzasVoladorasGabriel = [];
+                    puedeMoverse = false;
+                    textoContador = '¡NIVEL 6.1 COMPLETADO!';
+                    const tituloEl = document.getElementById('titulo-nivel-activo');
+                    if (tituloEl) tituloEl.textContent = 'NIVEL 6.1 — GABRIEL SE HA RETIRADO AL ABISMO';
+                }
+            }
+        }
+
+        estadoNivel6_1.lanzasVoladorasGabriel = estadoNivel6_1.lanzasVoladorasGabriel.filter(lz => {
+            if (ahora < lz.creadaEn) return true;
+            const transcurrido = ahora - lz.creadaEn;
+
+            if (!lz.impactada) {
+                const prog = Math.min(1, transcurrido / 1000);
+
+                ctx.save();
+                ctx.strokeStyle = 'rgba(250, 204, 21, 0.9)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(lz.destinoX, lz.destinoY, 34, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.fillStyle = `rgba(250, 204, 21, ${0.12 + prog * 0.28})`;
+                ctx.beginPath();
+                ctx.arc(lz.destinoX, lz.destinoY, 34 * prog, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+
+                lz.x = lz.origenX + (lz.destinoX - lz.origenX) * prog;
+                lz.y = lz.origenY + (lz.destinoY - lz.origenY) * prog;
+                dibujarLanzaSagradaVoladoraN6_1(lz.x, lz.y, lz.angulo, 0.95);
+
+                if (prog >= 1) {
+                    lz.impactada = true;
+                    lz.impactoEn = ahora;
+                    if (Math.hypot(nRegCx - lz.destinoX, nRegCy - lz.destinoY) <= 34 + jugador.tam * 0.35) {
+                        if (typeof estadoMarineP2 !== 'undefined' && estadoMarineP2.escudoActivo) {
+                            mantenerEscudoInfinitoN6_1();
+                        } else {
+                            recibirDanioJugadorNivel6_1(2);
+                        }
+                    }
+                }
+                return true;
+            } else {
+                dibujarLanzaSagradaVoladoraN6_1(lz.destinoX, lz.destinoY, Math.PI / 2, 1.05);
+                return (ahora - lz.impactoEn) < 260;
+            }
+        });
+
+        if (typeof estadoMarineP2 !== 'undefined') {
+            estadoMarineP2.balas = estadoMarineP2.balas.filter(b => {
+                b.x += b.vx;
+                b.y += b.vy;
+
+                if (impactarEnemigosNivel6_1(b, ahora)) return false;
+
+                ctx.fillStyle = '#fde047';
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, 4.5, 0, Math.PI * 2);
+                ctx.fill();
+                return b.x > anchoEd && b.x < w - anchoEd && b.y > -20 && b.y < h + 20;
+            });
+        }
+
+        dibujarJugadorTemplarioNegroN6_1(estadoNivel6_1.playerX, estadoNivel6_1.playerY, ahora);
+
+        const tiempoProx = Math.max(0, Math.ceil((estadoNivel6_1.proximaOleadaEn - ahora) / 1000));
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 10, 26, 0.85)';
+        ctx.fillRect(anchoEd + 14, 46, 430, 26);
+        ctx.strokeStyle = '#e879f9';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(anchoEd + 14, 46, 430, 26);
+        ctx.font = 'bold 13px "Courier New", monospace';
+        ctx.fillStyle = '#f3e8ff';
+        ctx.textAlign = 'left';
+
+        let infoOleada = '';
+        if (estadoNivel6_1.fase === 'victoria') {
+            infoOleada = '¡VICTORIA — GABRIEL SE HA MARCHADO!';
+        } else if (estadoNivel6_1.oleadaActual >= 13) {
+            infoOleada = 'OLEADA 13/13 — COMBATE FINAL CONTRA GABRIEL';
+        } else if (estadoNivel6_1.oleadaActual < 12) {
+            infoOleada = `OLEADA ${estadoNivel6_1.oleadaActual}/13 | PRÓXIMA: ${tiempoProx}s | [W] JEFE`;
+        } else {
+            infoOleada = 'OLEADA 12/13 — ¡ELIMINA A TODOS PARA EL JEFE!';
+        }
+        ctx.fillText(infoOleada, anchoEd + 24, 63);
+
+        if (ahora < estadoNivel6_1.mensajeAlertaHasta) {
+            ctx.font = 'bold 15px "Courier New", monospace';
+            ctx.fillStyle = '#facc15';
+            ctx.textAlign = 'center';
+            ctx.fillText(estadoNivel6_1.mensajeAlerta, w / 2, 128);
+        }
+        ctx.restore();
+
+        if (textoContador !== '') {
+            ctx.font = 'bold 44px "Courier New", monospace';
+            ctx.fillStyle = textoContador === 'GAME OVER' ? '#ff1e1e' : '#ffd60a';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(textoContador, w / 2, h / 2 - 20);
+
+            if (estadoNivel6_1.fase === 'victoria') {
+                ctx.font = 'bold 18px "Courier New", monospace';
+                ctx.fillStyle = '#e2e8f0';
+                ctx.fillText('Presiona "✕ Salir" arriba a la derecha para volver al menú', w / 2, h / 2 + 28);
+            }
+        }
+
+        animacionIdNivel6_1 = requestAnimationFrame(bucleNivel6_1);
+    }
+
+    function distanciaPuntoASegmentoN6_1(px, py, x1, y1, x2, y2) {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const len2 = dx * dx + dy * dy;
+        if (len2 === 0) return Math.hypot(px - x1, py - y1);
+        const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2));
+        return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+    }
+
+    function impactarEnemigosNivel6_1(bala, ahora) {
+        if (estadoNivel6_1.jefeGabriel && estadoNivel6_1.fase === 'combate_gabriel') {
+            const g = estadoNivel6_1.jefeGabriel;
+            if (Math.hypot(bala.x - g.x, bala.y - g.y) <= g.radio) {
+                g.vida -= (bala.danioJefe || 20);
+                g.flashHasta = ahora + 55;
+                if (g.vida <= 0) {
+                    // En lugar de explotar, inicia la secuencia de portal y despedida
+                    g.vida = 0;
+                    g.estadoCombate = 'flotando';
+                    g.riendoHasta = ahora + 5500;
+                    estadoNivel6_1.fase = 'gabriel_derrota_portal';
+                    estadoNivel6_1.inicioPaso = ahora;
+                    estadoNivel6_1.lanzasVoladorasGabriel = [];
+                    puedeMoverse = false;
+                }
+                return true;
+            }
+        }
+
+        for (let i = 0; i < estadoNivel6_1.enemigosNormales.length; i++) {
+            const en = estadoNivel6_1.enemigosNormales[i];
+            if (bala.x >= en.x && bala.x <= en.x + en.tam && bala.y >= en.y && bala.y <= en.y + en.tam) {
+                en.vida -= (bala.danioNormal || 15);
+                en.flashHasta = ahora + 70;
+                if (en.vida <= 0) estadoNivel6_1.enemigosNormales.splice(i, 1);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function recibirDanioJugadorNivel6_1(cantidad = 1, ignorarEscudo = false) {
+        const ahora = Date.now();
+        if (ahora < jugador.invulnerableHasta || jugador.vidas <= 0) return;
+
+        if (!ignorarEscudo && typeof estadoMarineP2 !== 'undefined' && estadoMarineP2.escudoActivo) {
+            mantenerEscudoInfinitoN6_1();
+            return;
+        }
+
+        // Gabriel se ríe de ti cuando logra hacerte daño
+        if (estadoNivel6_1.jefeGabriel && estadoNivel6_1.jefeGabriel.formaOscura) {
+            estadoNivel6_1.jefeGabriel.riendoHasta = ahora + 1300;
+        }
+
+        jugador.vidas = Math.max(0, jugador.vidas - cantidad);
+        jugador.invulnerableHasta = ahora + 1100;
+        if (typeof actualizarCorazonesUI === 'function') actualizarCorazonesUI();
+
+        if (jugador.vidas <= 0) {
+            puedeMoverse = false;
+            estadoNivel6_1.velAvanceCalle = 0;
+            detenerMusicaNivel6_1();
+            textoContador = 'GAME OVER';
+            const tituloEl = document.getElementById('titulo-nivel-activo');
+            if (tituloEl) tituloEl.textContent = 'NIVEL 6.1 — EL TEMPLARIO HA CAÍDO';
+        }
+    }
+</script>

@@ -1,16 +1,66 @@
 <script>
+    // Limpia cualquier bloque duplicado de "ARCADE — PARTE 2" si dos plantillas lo renderizaron
+    document.addEventListener('DOMContentLoaded', () => {
+        const titulosParte2 = Array.from(document.querySelectorAll('h1, h2, h3, div, p')).filter(
+            el => el.children.length === 0 && el.textContent.includes('ARCADE — PARTE 2')
+        );
+        if (titulosParte2.length > 1) {
+            for (let i = 1; i < titulosParte2.length; i++) {
+                const contenedor = titulosParte2[i].closest('section, .arcade-parte2, .nivel-seccion') || titulosParte2[i].parentElement;
+                if (contenedor) contenedor.style.display = 'none';
+            }
+        }
+    });
+
     let animacionIdNivel6 = null;
     let estadoNivel6 = null;
 
-    // Control exclusivo del Nivel 6: Tecla [B] para curar escuadrón y al jugador con botiquín
+    // Control exclusivo del Nivel 6:
+    // [W] -> Teletransporta / invoca directo al Jefe Final
+    // [B] -> Cura al jugador y escuadrón con botiquín
     window.addEventListener('keydown', e => {
-        if (!juegoActivo || nivelActual !== 6 || !estadoNivel6) return;
+        if (!juegoActivo || Number(nivelActual) !== 6 || !estadoNivel6) return;
+
+        if (e.code === 'KeyW' && !e.repeat) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            invocarJefeFinalDirectoN6();
+            return;
+        }
 
         if (e.code === 'KeyB' && !e.repeat) {
             e.preventDefault();
             usarBotiquinEscuadronN6();
         }
     }, true);
+
+    function invocarJefeFinalDirectoN6() {
+        if (!estadoNivel6) return;
+        const ahora = Date.now();
+        const w = canvas.width;
+
+        estadoNivel6.fase = 'combate';
+        estadoNivel6.velAvanceCalle = 0;
+        estadoNivel6.oleadaActual = estadoNivel6.totalOleadas;
+        estadoNivel6.pendientesNormales = 0;
+        estadoNivel6.pendientesElites = 0;
+        estadoNivel6.enemigosNormales = [];
+        estadoNivel6.guardianesElites = [];
+        estadoNivel6.jefesAlfa = [];
+        estadoNivel6.proyectilesAcido = [];
+        estadoNivel6.avisosAcidoJefes = [];
+        estadoNivel6.charcosAcido = [];
+        puedeMoverse = true;
+
+        if (!estadoNivel6.jefeFinalDreadnought) {
+            estadoNivel6.jefeFinalInvocado = true;
+            estadoNivel6.jefeFinalDreadnought = crearJefeFinalDreadnoughtN6(w, ahora);
+            estadoNivel6.mensajeAlerta = '⚡ [W] ACTIVADA — ¡COMBATE DIRECTO CONTRA EL DREADNOUGHT REDEMPTOR INFECTADO!';
+            estadoNivel6.mensajeAlertaHasta = ahora + 3200;
+            document.getElementById('titulo-nivel-activo').textContent =
+                'NIVEL 6 — COMBATE FINAL: DREADNOUGHT REDEMPTOR INFECTADO';
+        }
+    }
 
     function usarBotiquinEscuadronN6() {
         if (!estadoNivel6 || estadoNivel6.fase !== 'combate') return;
@@ -34,7 +84,7 @@
 
         if (jugador.vidas < jugador.vidasMax) {
             jugador.vidas = Math.min(jugador.vidasMax, jugador.vidas + 1);
-            actualizarCorazonesUI();
+            if (typeof actualizarCorazonesUI === 'function') actualizarCorazonesUI();
             curados++;
         }
 
@@ -46,22 +96,32 @@
         actualizarHudNivel6();
     }
 
+    function mantenerEscudoInfinitoN6() {
+        estadoMarineP2.escudoRoto = false;
+        estadoMarineP2.escudoGolpesRestantes = 999;
+    }
+
+    function bloquearConEscudoInfinitoN6() {
+        mantenerEscudoInfinitoN6();
+    }
+
     function actualizarHudNivel6() {
         const hudEnergia = document.getElementById('cargas-energia');
         const hudDerecha = document.querySelector('.hud-juego span:last-child');
         if (!estadoNivel6) return;
 
+        mantenerEscudoInfinitoN6();
         const vivos = estadoNivel6.aliados.filter(a => a.vivo).length;
 
-        if (hudDerecha && nivelActual === 6) {
-            hudDerecha.textContent = '[WASD / FLECHAS] MOVER | [ESPACIO] DISPARAR | [E] ESCUDO | [B] BOTIQUÍN';
+        if (hudDerecha && Number(nivelActual) === 6) {
+            hudDerecha.textContent = '[FLECHAS] MOVER | [ESPACIO] DISPARAR | [E] ESCUDO (∞) | [B] BOTIQUÍN | [W] JEFE FINAL';
             hudDerecha.style.color = '#cbd5e1';
         }
 
-        if (hudEnergia && nivelActual === 6) {
-            const txtEscudo = estadoMarineP2.escudoRoto
-                ? '💥 SIN ESCUDO'
-                : (estadoMarineP2.escudoActivo ? '🛡️ ESCUDO ACTIVO' : `🛡️ [E] (${estadoMarineP2.escudoGolpesRestantes}/3)`);
+        if (hudEnergia && Number(nivelActual) === 6) {
+            const txtEscudo = estadoMarineP2.escudoActivo
+                ? '🛡️ ESCUDO ACTIVO (∞)'
+                : '🛡️ [E] INFINITO (∞)';
             const txtArma = estadoNivel6.tieneAmetralladora ? '🔥 AMETRALLADORA (20/s)' : '🔫 BÓLTER';
             hudEnergia.textContent = `🪖 ALIADOS: ${vivos}/10 | ✚ [B]: ${estadoNivel6.botiquines} | ${txtArma} | ${txtEscudo}`;
             hudEnergia.style.color = estadoNivel6.tieneAmetralladora ? '#facc15' : '#38bdf8';
@@ -73,9 +133,25 @@
     // ============================================================
     function iniciarNivel6() {
         cancelAnimationFrame(animacionIdNivel6);
-        clearInterval(intervaloContador);
+        if (typeof intervaloContador !== 'undefined') clearInterval(intervaloContador);
         textoContador = '';
-        activarPantallaCompletaParte2();
+
+        // CORRECCIÓN PRINCIPAL: Forzar estado activo y nivelActual numérico 6
+        // para evitar pantalla negra al arrancar desde el menú o al cambiar de nivel.
+        juegoActivo = true;
+        nivelActual = 6;
+
+        if (typeof activarPantallaCompletaParte2 === 'function') {
+            activarPantallaCompletaParte2();
+        }
+
+        // Garantizar dimensiones válidas del canvas antes de ubicar al jugador, aliados y edificios
+        if (!canvas.width || canvas.width < 100) {
+            canvas.width = canvas.clientWidth || window.innerWidth || 1000;
+        }
+        if (!canvas.height || canvas.height < 100) {
+            canvas.height = canvas.clientHeight || window.innerHeight || 650;
+        }
 
         const w = canvas.width;
         const h = canvas.height;
@@ -85,10 +161,10 @@
         jugador.vidasMax = 10;
         jugador.vidas = 10;
         jugador.invulnerableHasta = 0;
-        actualizarCorazonesUI();
+        if (typeof actualizarCorazonesUI === 'function') actualizarCorazonesUI();
 
         estadoMarineP2.escudoActivo = false;
-        estadoMarineP2.escudoGolpesRestantes = 3;
+        estadoMarineP2.escudoGolpesRestantes = 999;
         estadoMarineP2.escudoRoto = false;
         estadoMarineP2.disparando = false;
         estadoMarineP2.anguloTopDown = -Math.PI / 2;
@@ -157,10 +233,10 @@
             guardianesElites: [],
             jefesAlfa: [],
             jefeFinalDreadnought: null,
-            jefeFinalInvocado: false, // Solo se invoca cuando las 15 hordas y TODOS los enemigos hayan muerto
+            jefeFinalInvocado: false,
             proyectilesDreadnought: [],
-            avisosMisilesDreadnought: [],
-            ondasChoqueDreadnought: [],
+            cochesLanzadosDreadnought: [],
+            ondasPisadaDreadnought: [],
             avisosAcidoJefes: [],
             balasAliados: [],
             proyectilesAcido: [],
@@ -170,7 +246,7 @@
             tieneAmetralladora: false,
             botiquines: 1,
             oleadaActual: 0,
-            totalOleadas: 15, // 15 Hordas de oleadas + Ronda Final 16 exclusiva del Jefe Final
+            totalOleadas: 15,
             proximaOleadaEn: 0,
             pendientesNormales: 0,
             pendientesElites: 0,
@@ -184,7 +260,7 @@
         };
 
         puedeMoverse = false;
-        document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 6 — ENCUENTRO CON LA GUARDIA DE LA CIUDAD';
+        document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 6 — ENCUENTRO CON LA GUARDIA DE LA CIUDAD (PULSA [W] PARA JEFE FINAL)';
         actualizarHudNivel6();
         bucleNivel6();
     }
@@ -218,31 +294,38 @@
     }
 
     function crearJefeFinalDreadnoughtN6(w, ahora) {
-        // 5 veces más grande que el jugador (jugador.tam = 42 -> 210px)
         const tamDread = jugador.tam * 5;
         return {
             x: w / 2,
-            y: -120, // Entra imponiéndose desde el frente de la base enemiga
+            y: 145,
             tam: tamDread,
             radio: tamDread * 0.42,
             angulo: Math.PI / 2,
             vida: 50000,
             vidaMax: 50000,
             flashHasta: 0,
-            estado: 'marchando',
+            estado: 'patrullando',
             inicioEstado: ahora,
-            proximoAtaqueEn: ahora + 1700,
-            embestidaOrigenX: 0,
-            embestidaOrigenY: 0,
-            embestidaDestinoX: 0,
-            embestidaDestinoY: 0,
-            embestidaGolpeo: false,
-            ultimoDisparoRotativo: 0,
-            rafagasDisparadas: 0,
-            laserAnguloInicio: 0,
-            laserAnguloActual: 0,
-            laserGolpeoJugador: false,
-            latigosGolpeoJugador: false
+            proximoAtaqueEn: ahora + 1200,
+            destinoX: w / 2,
+            destinoY: 165,
+            avisoPisadaActivo: false,
+            avisoPisadaInicio: 0,
+            pisadaX: w / 2,
+            pisadaY: 145,
+            radioPisada: 145,
+            proximaPisadaEn: ahora + 1400,
+            esquinaActualIdx: 0,
+            esquinaDestinoX: 0,
+            esquinaDestinoY: 0,
+            ultimoDisparoEsquina: 0,
+            finRafagaEsquina: 0,
+            cocheObjetivo: null,
+            cocheDestinoX: 0,
+            cocheDestinoY: 0,
+            punetazoAngulo: 0,
+            punetazoAlcance: 185,
+            punetazoGolpeo: false
         };
     }
 
@@ -265,7 +348,6 @@
 
         let textoExtra = '';
 
-        // HORDA 7: Cofre con Ametralladora Pesada
         if (n === 7) {
             estadoNivel6.cofreArma = {
                 x: w / 2,
@@ -277,14 +359,12 @@
             textoExtra = ' — ¡COFRE DE ARMAMENTO PESADO EN LA AVENIDA!';
         }
 
-        // HORDAS 9 a 12: 1 Depredador Alfa (3,000 HP)
         if (n >= 9 && n <= 12) {
             const jx = anchoEd + 110 + Math.random() * Math.max(120, w - anchoEd * 2 - 220);
             estadoNivel6.jefesAlfa.push(crearDepredadorAlfaN6(jx, 85, ahora));
             textoExtra = ' — ¡DEPREDADOR ALFA (3,000 HP) HA LLEGADO!';
         }
 
-        // HORDAS 13 a 15: 3 Depredadores Alfa (3,000 HP cada uno)
         if (n >= 13 && n <= 15) {
             const anchoUtil = w - anchoEd * 2;
             const posicionesX = [
@@ -301,7 +381,7 @@
         estadoNivel6.mensajeAlerta = `⚠️ HORDA ${n}/${estadoNivel6.totalOleadas}${textoExtra}`;
         estadoNivel6.mensajeAlertaHasta = ahora + 3200;
         document.getElementById('titulo-nivel-activo').textContent =
-            `NIVEL 6 — HORDA ${n}/${estadoNivel6.totalOleadas} (MARCHA AL FRENTE ENEMIGO)`;
+            `NIVEL 6 — HORDA ${n}/${estadoNivel6.totalOleadas} (PULSA [W] PARA JEFE FINAL)`;
     }
 
     function generarEnemigosPendientesN6(w, h, ahora) {
@@ -353,18 +433,16 @@
     // ============================================================
     function dibujarDreadnoughtInfectadoTopDownN6(dread, ahora) {
         const golpeado = ahora < dread.flashHasta;
-        const R = dread.radio; // 5 veces el tamaño del jugador
+        const R = dread.radio;
 
         ctx.save();
         ctx.translate(dread.x, dread.y);
 
-        // Sombra colosal
         ctx.fillStyle = 'rgba(0, 0, 0, 0.78)';
         ctx.beginPath();
         ctx.ellipse(10, 14, R * 1.24, R * 1.12, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Aura bio-tóxica y psíquica tiránida envolviendo al caminante
         const aura = ctx.createRadialGradient(0, 0, R * 0.35, 0, 0, R * 1.65);
         aura.addColorStop(0, 'rgba(168, 85, 247, 0.38)');
         aura.addColorStop(0.55, 'rgba(132, 204, 22, 0.16)');
@@ -374,34 +452,8 @@
         ctx.arc(0, 0, R * 1.65, 0, Math.PI * 2);
         ctx.fill();
 
-        // --- HABILIDAD DE LÁTIGOS DE TENTÁCULOS BIOLÓGICOS (SI ESTÁ ACTIVA) ---
-        if (dread.estado === 'latigos') {
-            const progLat = Math.min(1, (ahora - dread.inicioEstado) / 550);
-            const alcanceLat = R * (1.1 + Math.sin(progLat * Math.PI) * 1.15);
-            for (let l = 0; l < 6; l++) {
-                const angL = (Math.PI * 2 / 6) * l + progLat * 1.4;
-                ctx.strokeStyle = '#9333ea';
-                ctx.lineWidth = 10;
-                ctx.lineCap = 'round';
-                ctx.beginPath();
-                ctx.moveTo(0, 0);
-                ctx.quadraticCurveTo(
-                    Math.cos(angL + 0.4) * alcanceLat * 0.6,
-                    Math.sin(angL + 0.4) * alcanceLat * 0.6,
-                    Math.cos(angL) * alcanceLat,
-                    Math.sin(angL) * alcanceLat
-                );
-                ctx.stroke();
-
-                ctx.strokeStyle = '#f97316';
-                ctx.lineWidth = 4;
-                ctx.stroke();
-            }
-        }
-
         ctx.rotate(dread.angulo);
 
-        // --- PIERNAS BLINDADAS CON TENDONES TIRÁNIDOS ---
         const pasoPierna = Math.sin(ahora / 170) * 14;
         [-1, 1].forEach(lado => {
             const px = lado === -1 ? pasoPierna : -pasoPierna;
@@ -414,7 +466,6 @@
             ctx.fill();
             ctx.stroke();
 
-            // Espolón quitinoso morado brotando de cada rodilla
             ctx.fillStyle = golpeado ? '#ffffff' : '#6b21a8';
             ctx.beginPath();
             ctx.moveTo(px + 12, py - 8);
@@ -424,7 +475,7 @@
             ctx.fill();
         });
 
-        // --- BRAZO DERECHO (+Y): MACRO-INCINERADOR DE PLASMA MUTADO ---
+        // BRAZO DERECHO (+Y): MACRO-INCINERADOR DE PLASMA MUTADO
         ctx.save();
         ctx.translate(R * 0.14, R * 0.90);
         ctx.fillStyle = golpeado ? '#ffffff' : '#18181b';
@@ -435,7 +486,6 @@
         ctx.fill();
         ctx.stroke();
 
-        // Bobinas de plasma cian infectadas con venas verdes ácidas
         const pulsoPlasma = 0.78 + Math.sin(ahora / 75) * 0.22;
         ctx.fillStyle = `rgba(56, 189, 248, ${pulsoPlasma})`;
         ctx.fillRect(10, -11, R * 0.70, 24);
@@ -446,7 +496,6 @@
         ctx.quadraticCurveTo(R * 0.45, 16, R * 0.78, -6);
         ctx.stroke();
 
-        // Garras orgánicas abrazando el cañón de plasma
         ctx.fillStyle = golpeado ? '#ffffff' : '#581c87';
         ctx.beginPath();
         ctx.moveTo(R * 0.35, 18);
@@ -459,9 +508,10 @@
         ctx.fillRect(R * 0.98, -14, 18, 30);
         ctx.restore();
 
-        // --- BRAZO IZQUIERDO (-Y): PUÑO REDEMPTOR + TRIPLE GARRA GUADAÑA TIRÁNIDA ---
+        // BRAZO IZQUIERDO (-Y): PUÑO REDEMPTOR + TRIPLE GARRA GUADAÑA TIRÁNIDA
         ctx.save();
-        ctx.translate(R * 0.16, -R * 0.90);
+        const avancePuno = dread.estado === 'ejecutando_punetazo' ? 38 : 0;
+        ctx.translate(R * 0.16 + avancePuno, -R * 0.90);
         ctx.fillStyle = '#27272a';
         ctx.strokeStyle = '#a1a1aa';
         ctx.lineWidth = 1.8;
@@ -476,13 +526,11 @@
         ctx.fill();
         ctx.stroke();
 
-        // Masa biológica morada envolviendo el puño
         ctx.fillStyle = golpeado ? '#ffffff' : '#4c1d95';
         ctx.beginPath();
         ctx.arc(R * 0.25, -8, 22, 0, Math.PI * 2);
         ctx.fill();
 
-        // 3 enormes garras guadaña carmesí serradas mutadas
         [-18, -4, 10].forEach((offsetG, idxG) => {
             ctx.fillStyle = golpeado ? '#ffffff' : '#9f1239';
             ctx.strokeStyle = '#fda4af';
@@ -497,8 +545,7 @@
         });
         ctx.restore();
 
-        // --- HOMBRERAS DE ULTRAMARINES CORROMPIDAS ---
-        // Hombrera Derecha (+Y): Azul con símbolo Omega blanco (Ω) + Espinas moradas
+        // HOMBRERAS DE ULTRAMARINES CORROMPIDAS
         ctx.fillStyle = golpeado ? '#ffffff' : '#1e40af';
         ctx.strokeStyle = '#60a5fa';
         ctx.lineWidth = 2.5;
@@ -519,14 +566,12 @@
         ctx.lineTo(12, R * 0.76 + 8);
         ctx.stroke();
 
-        // Pústulas ácidas brillantes sobre la hombrera derecha
         ctx.fillStyle = '#84cc16';
         ctx.beginPath();
         ctx.arc(-R * 0.22, R * 0.68, 7, 0, Math.PI * 2);
         ctx.arc(-R * 0.14, R * 0.86, 5, 0, Math.PI * 2);
         ctx.fill();
 
-        // Hombrera Izquierda (-Y): Totalmente cubierta por caparazón quitinoso tiránido morado
         ctx.fillStyle = golpeado ? '#ffffff' : '#4c1d95';
         ctx.strokeStyle = '#d8b4fe';
         ctx.lineWidth = 2.5;
@@ -540,7 +585,6 @@
         ctx.fill();
         ctx.stroke();
 
-        // Insignia amarilla "II" medio devorada por la infección
         ctx.fillStyle = '#eab308';
         ctx.beginPath();
         ctx.arc(8, -R * 0.74, 10, 0, Math.PI * 2);
@@ -550,7 +594,7 @@
         ctx.textAlign = 'center';
         ctx.fillText('II', 8, -R * 0.70);
 
-        // --- TORSO CENTRAL BLINDADO + CRECIMIENTO ORGÁNICO TIRÁNIDO ---
+        // TORSO CENTRAL BLINDADO + CRECIMIENTO ORGÁNICO TIRÁNIDO
         ctx.fillStyle = golpeado ? '#ffffff' : '#1d4ed8';
         ctx.strokeStyle = '#93c5fd';
         ctx.lineWidth = 3;
@@ -559,7 +603,6 @@
         ctx.fill();
         ctx.stroke();
 
-        // Placa frontal con Águila Dorada partida por grietas de biomasa morada
         ctx.fillStyle = golpeado ? '#ffffff' : '#2563eb';
         ctx.beginPath();
         ctx.roundRect(R * 0.10, -R * 0.38, R * 0.58, R * 0.76, 8);
@@ -575,7 +618,6 @@
         ctx.closePath();
         ctx.fill();
 
-        // Visor del sarcófago mutado con ojos múltiples tiránidos amarillos y rojo sangre
         ctx.fillStyle = '#09090b';
         ctx.strokeStyle = '#a855f7';
         ctx.lineWidth = 2.5;
@@ -592,7 +634,6 @@
             ctx.fill();
         });
 
-        // 6 Tentáculos biológicos largos retorciéndose desde el frente y costados
         for (let t = -2; t <= 2; t++) {
             const ond = Math.sin(ahora / 95 + t * 1.3) * 9;
             ctx.strokeStyle = t % 2 === 0 ? '#f97316' : '#a855f7';
@@ -603,7 +644,6 @@
             ctx.stroke();
         }
 
-        // Espinas quitinosas dorsales sobre el techo del Dreadnought
         [-24, -8, 8, 24].forEach(sy => {
             ctx.fillStyle = golpeado ? '#ffffff' : '#7e22ce';
             ctx.beginPath();
@@ -614,7 +654,6 @@
             ctx.fill();
         });
 
-        // Red de venas moradas y ácidas palpitando sobre todo el chasis
         ctx.strokeStyle = '#c084fc';
         ctx.lineWidth = 2.6;
         ctx.beginPath();
@@ -624,7 +663,7 @@
         ctx.lineTo(R * 0.35, R * 0.44);
         ctx.stroke();
 
-        // --- POD LANZACOHETES ÍCARO EN EL TECHO ---
+        // POD LANZACOHETES ÍCARO EN EL TECHO
         ctx.fillStyle = '#0f172a';
         ctx.strokeStyle = '#a855f7';
         ctx.lineWidth = 2.2;
@@ -650,10 +689,12 @@
         const parpadeo = ahora < jugador.invulnerableHasta && Math.floor(ahora / 90) % 2 === 0;
         if (parpadeo) return;
 
+        mantenerEscudoInfinitoN6();
+
         const cx = screenX + jugador.tam / 2;
         const cy = screenY + jugador.tam / 2;
         const radio = jugador.tam * 0.54;
-        const escudoActivo = estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto;
+        const escudoActivo = estadoMarineP2.escudoActivo;
         const disparandoAhora = estadoMarineP2.disparando && !escudoActivo;
         const tieneAmetralladora = estadoNivel6 && estadoNivel6.tieneAmetralladora;
 
@@ -1205,7 +1246,11 @@
     // 7. BUCLE PRINCIPAL DEL NIVEL 6
     // ============================================================
     function bucleNivel6() {
-        if (!juegoActivo || nivelActual !== 6 || !estadoNivel6) return;
+        if (!juegoActivo || Number(nivelActual) !== 6 || !estadoNivel6) return;
+
+        // Mantener siempre el escudo infinito activo y sin rotura
+        mantenerEscudoInfinitoN6();
+        actualizarHudNivel6();
 
         const ahora = Date.now();
         const w = canvas.width;
@@ -1223,13 +1268,13 @@
             return;
         }
 
-        // Movimiento libre del Gran Regente
+        // Movimiento libre del Gran Regente (Flechas direccionales + A/S/D; W reservada para Jefe Final)
         if (puedeMoverse && jugador.vidas > 0 && estadoNivel6.fase === 'combate') {
             let mx = 0;
             let my = 0;
             if (teclas.ArrowLeft || teclasExtraP2.KeyA) mx -= 1;
             if (teclas.ArrowRight || teclasExtraP2.KeyD) mx += 1;
-            if (teclas.ArrowUp || teclasExtraP2.KeyW) my -= 1;
+            if (teclas.ArrowUp) my -= 1;
             if (teclas.ArrowDown || teclasExtraP2.KeyS) my += 1;
 
             if (mx !== 0 || my !== 0) {
@@ -1252,7 +1297,6 @@
             }
             generarEnemigosPendientesN6(w, h, ahora);
 
-            // Verificar si ya terminaron las 15 hordas y NO queda ningún enemigo vivo en el mapa
             const campoCompletamenteLimpio =
                 estadoNivel6.oleadaActual >= estadoNivel6.totalOleadas &&
                 estadoNivel6.pendientesNormales === 0 &&
@@ -1263,7 +1307,7 @@
 
             if (campoCompletamenteLimpio && !estadoNivel6.jefeFinalInvocado) {
                 estadoNivel6.jefeFinalInvocado = true;
-                estadoNivel6.velAvanceCalle = 0; // El escuadrón llega al frente final de la base enemiga
+                estadoNivel6.velAvanceCalle = 0;
                 estadoNivel6.jefeFinalDreadnought = crearJefeFinalDreadnoughtN6(w, ahora);
                 estadoNivel6.mensajeAlerta = '🚨 ¡AVENIDA DESPEJADA — EL DREADNOUGHT REDEMPTOR INFECTADO (50,000 HP) BLOQUEA LA BASE!';
                 estadoNivel6.mensajeAlertaHasta = ahora + 4200;
@@ -1365,7 +1409,8 @@
                 return true;
             } else {
                 if (Math.hypot(nRegCx - av.x, nRegCy - av.y) <= av.radio + jugador.tam * 0.4) {
-                    if (!estadoMarineP2.escudoActivo || estadoMarineP2.escudoRoto) recibirDanioJugadorNivel6(1);
+                    if (estadoMarineP2.escudoActivo) bloquearConEscudoInfinitoN6();
+                    else recibirDanioJugadorNivel6(1);
                 }
                 estadoNivel6.aliados.forEach(al => {
                     if (al.vivo && Math.hypot(al.x - av.x, al.y - av.y) <= av.radio + al.tam * 0.4) {
@@ -1388,7 +1433,8 @@
             ctx.fill();
 
             if (Math.hypot(ac.x - nRegCx, ac.y - nRegCy) <= jugador.tam * 0.45) {
-                if (!estadoMarineP2.escudoActivo || estadoMarineP2.escudoRoto) recibirDanioJugadorNivel6(1);
+                if (estadoMarineP2.escudoActivo) bloquearConEscudoInfinitoN6();
+                else recibirDanioJugadorNivel6(1);
                 return false;
             }
 
@@ -1460,7 +1506,6 @@
                 al.angulo = -Math.PI / 2;
             }
 
-            // Esquive activo
             if (ahora - al.ultimoEsquive >= 1050) {
                 let amenazaX = null;
                 let amenazaY = null;
@@ -1587,7 +1632,7 @@
             estadoMarineP2.anguloTopDown = Math.atan2(objRegY - nRegCy, objRegX - nRegCx);
         }
 
-        // Disparo del Gran Regente: 20 balas/seg (50ms) con Ametralladora Pesada
+        // Disparo del Gran Regente
         const cadenciaRegente = estadoNivel6.tieneAmetralladora ? 50 : 125;
         if (puedeMoverse && jugador.vidas > 0 && estadoNivel6.fase === 'combate') {
             if (estadoMarineP2.disparando && !estadoMarineP2.escudoActivo && ahora - estadoMarineP2.ultimoDisparo >= cadenciaRegente) {
@@ -1655,7 +1700,8 @@
                     en.x -= (dx / d) * 20;
                     en.y -= (dy / d) * 20;
                 } else {
-                    if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) {
+                    if (estadoMarineP2.escudoActivo) {
+                        bloquearConEscudoInfinitoN6();
                         en.x -= (dx / d) * 26;
                         en.y -= (dy / d) * 26;
                     } else {
@@ -1664,7 +1710,9 @@
                 }
             }
 
-            dibujarEnemigoTiranidoN5(en, ahora, true);
+            if (typeof dibujarEnemigoTiranidoN5 === 'function') {
+                dibujarEnemigoTiranidoN5(en, ahora, true);
+            }
         });
 
         // Guardianes Élites
@@ -1708,8 +1756,8 @@
                     if (targetEsAliado) {
                         danarAliadoN6(targetEsAliado, 1, ahora);
                     } else {
-                        if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) {
-                            absorberGolpeEscudoContraJefe();
+                        if (estadoMarineP2.escudoActivo) {
+                            bloquearConEscudoInfinitoN6();
                         } else {
                             recibirDanioJugadorNivel6(2);
                         }
@@ -1784,7 +1832,7 @@
                         }
                     }
                 } else if (jefe.estado === 'aviso_embestida') {
-                    if (ahora - jefe.inicioEstado >= 900) {
+                    if (ahora - jefe.inicioEstado >= 1000) {
                         jefe.estado = 'embistiendo';
                         jefe.inicioEstado = ahora;
                     }
@@ -1796,7 +1844,7 @@
                     if (!jefe.embestidaGolpeo) {
                         if (Math.hypot(nRegCx - jefe.x, nRegCy - jefe.y) <= jefe.radio + jugador.tam * 0.45) {
                             jefe.embestidaGolpeo = true;
-                            if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) absorberGolpeEscudoContraJefe();
+                            if (estadoMarineP2.escudoActivo) bloquearConEscudoInfinitoN6();
                             else recibirDanioJugadorNivel6(2);
                         } else if (tAliado && Math.hypot(tAliado.x - jefe.x, tAliado.y - jefe.y) <= jefe.radio + tAliado.tam * 0.45) {
                             jefe.embestidaGolpeo = true;
@@ -1809,7 +1857,7 @@
                         jefe.proximoAtaqueEn = ahora + 1100;
                     }
                 } else if (jefe.estado === 'aviso_cola') {
-                    if (ahora - jefe.inicioEstado >= 900) {
+                    if (ahora - jefe.inicioEstado >= 1000) {
                         jefe.estado = 'golpe_cola';
                         jefe.inicioEstado = ahora;
                     }
@@ -1818,7 +1866,7 @@
                     if (!jefe.colaGolpeo) {
                         if (Math.hypot(nRegCx - jefe.x, nRegCy - jefe.y) <= jefe.colaAlcance) {
                             jefe.colaGolpeo = true;
-                            if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) absorberGolpeEscudoContraJefe();
+                            if (estadoMarineP2.escudoActivo) bloquearConEscudoInfinitoN6();
                             else recibirDanioJugadorNivel6(2);
                         } else if (tAliado && Math.hypot(tAliado.x - jefe.x, tAliado.y - jefe.y) <= jefe.colaAlcance) {
                             jefe.colaGolpeo = true;
@@ -1864,241 +1912,246 @@
         });
 
         // ============================================================
-        // 8. IA Y 7 HABILIDADES DEL JEFE FINAL: DREADNOUGHT INFECTADO (50,000 HP)
+        // 8. IA DEL JEFE FINAL: DREADNOUGHT INFECTADO (50,000 HP)
         // ============================================================
         if (estadoNivel6.jefeFinalDreadnought) {
             const dread = estadoNivel6.jefeFinalDreadnought;
+            const margenX = anchoEd + dread.radio + 25;
+            const minX = margenX;
+            const maxX = w - margenX;
+            const minY = dread.radio + 45;
+            const maxY = h - dread.radio - 45;
+
+            const esquinas = [
+                { x: minX, y: minY },
+                { x: maxX, y: minY },
+                { x: maxX, y: maxY },
+                { x: minX, y: maxY }
+            ];
 
             if (puedeMoverse && jugador.vidas > 0 && estadoNivel6.fase === 'combate') {
                 const dx = nRegCx - dread.x;
                 const dy = nRegCy - dread.y;
                 const dist = Math.hypot(dx, dy) || 1;
 
-                if (dread.estado === 'marchando') {
-                    dread.angulo = Math.atan2(dy, dx);
-                    dread.x += (dx / dist) * 2.2;
-                    dread.y += (dy / dist) * 2.2;
+                // PISADAS PESADAS CON AVISO DE 1 SEGUNDO (2 DE DAÑO EN ÁREA)
+                if (!dread.avisoPisadaActivo && ahora >= dread.proximaPisadaEn &&
+                    (dread.estado === 'patrullando' || dread.estado === 'corriendo_esquina')) {
+                    dread.avisoPisadaActivo = true;
+                    dread.avisoPisadaInicio = ahora;
+                    dread.pisadaX = dread.x;
+                    dread.pisadaY = dread.y;
+                }
 
-                    if (dist <= dread.radio + jugador.tam * 0.4) {
-                        if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) absorberGolpeEscudoContraJefe();
-                        else recibirDanioJugadorNivel6(2);
+                if (dread.avisoPisadaActivo) {
+                    const progPisada = Math.min(1, (ahora - dread.avisoPisadaInicio) / 1000);
+                    ctx.save();
+                    ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(dread.pisadaX, dread.pisadaY, dread.radioPisada, 0, Math.PI * 2);
+                    ctx.stroke();
+
+                    ctx.fillStyle = `rgba(239, 68, 68, ${0.12 + progPisada * 0.28})`;
+                    ctx.beginPath();
+                    ctx.arc(dread.pisadaX, dread.pisadaY, dread.radioPisada * progPisada, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+
+                    if (progPisada >= 1) {
+                        dread.avisoPisadaActivo = false;
+                        dread.proximaPisadaEn = ahora + 2200;
+                        estadoNivel6.ondasPisadaDreadnought.push({
+                            x: dread.pisadaX,
+                            y: dread.pisadaY,
+                            radio: dread.radioPisada,
+                            creadoEn: ahora
+                        });
+
+                        if (Math.hypot(nRegCx - dread.pisadaX, nRegCy - dread.pisadaY) <= dread.radioPisada + jugador.tam * 0.4) {
+                            if (estadoMarineP2.escudoActivo) bloquearConEscudoInfinitoN6();
+                            else recibirDanioJugadorNivel6(2);
+                        }
+                        estadoNivel6.aliados.forEach(al => {
+                            if (al.vivo && Math.hypot(al.x - dread.pisadaX, al.y - dread.pisadaY) <= dread.radioPisada + al.tam * 0.4) {
+                                danarAliadoN6(al, 1, ahora);
+                            }
+                        });
+                    }
+                }
+
+                if (dread.estado === 'patrullando') {
+                    const dDest = Math.hypot(dread.destinoX - dread.x, dread.destinoY - dread.y);
+                    if (dDest < 35) {
+                        dread.destinoX = minX + Math.random() * Math.max(80, maxX - minX);
+                        dread.destinoY = minY + Math.random() * Math.max(80, maxY - minY);
+                    } else {
+                        const angM = Math.atan2(dread.destinoY - dread.y, dread.destinoX - dread.x);
+                        dread.angulo = angM;
+                        dread.x += Math.cos(angM) * 3.2;
+                        dread.y += Math.sin(angM) * 3.2;
                     }
 
                     if (ahora >= dread.proximoAtaqueEn) {
-                        const r = Math.random();
-                        if (r < 0.16) {
-                            // HABILIDAD 1: MACRO-INCINERADOR DE PLASMA BIO-CORRUPTO (5 orbes en abanico)
-                            const baseAng = Math.atan2(dy, dx);
-                            [-0.36, -0.18, 0, 0.18, 0.36].forEach(offset => {
-                                const a = baseAng + offset;
-                                estadoNivel6.proyectilesDreadnought.push({
-                                    tipo: 'plasma',
-                                    x: dread.x + Math.cos(a) * dread.radio,
-                                    y: dread.y + Math.sin(a) * dread.radio,
-                                    vx: Math.cos(a) * 8.8,
-                                    vy: Math.sin(a) * 8.8,
-                                    radio: 16,
-                                    vida: 90
-                                });
-                            });
-                            dread.proximoAtaqueEn = ahora + 1850;
-                        } else if (r < 0.32) {
-                            // HABILIDAD 2: ANDANADA DE COHETES ÍCARO (9 zonas de bombardeo)
-                            for (let m = 0; m < 9; m++) {
-                                estadoNivel6.avisosMisilesDreadnought.push({
-                                    x: anchoEd + 55 + Math.random() * Math.max(90, w - anchoEd * 2 - 110),
-                                    y: 95 + Math.random() * (h - 170),
-                                    radio: 46,
-                                    creadoEn: ahora
-                                });
-                            }
-                            dread.proximoAtaqueEn = ahora + 2100;
-                        } else if (r < 0.48) {
-                            // HABILIDAD 3: TORMENTA DE CAÑÓN ROTATIVO (14 balas rápidas)
-                            dread.estado = 'rotativo';
+                        if (dist <= 240 && Math.random() < 0.65) {
+                            dread.estado = 'aviso_punetazo';
                             dread.inicioEstado = ahora;
-                            dread.ultimoDisparoRotativo = 0;
-                            dread.rafagasDisparadas = 0;
-                        } else if (r < 0.64) {
-                            // HABILIDAD 4: EMBESTIDA SÍSMICA + DOBLE ONDA EXPANSIVA
-                            dread.estado = 'aviso_embestida';
+                            dread.punetazoAngulo = Math.atan2(dy, dx);
+                            dread.angulo = dread.punetazoAngulo;
+                            dread.punetazoGolpeo = false;
+                        } else if (Math.random() < 0.55) {
+                            dread.estado = 'aviso_esquina';
                             dread.inicioEstado = ahora;
-                            dread.embestidaOrigenX = dread.x;
-                            dread.embestidaOrigenY = dread.y;
-                            const angEmb = Math.atan2(dy, dx);
-                            dread.angulo = angEmb;
-                            const distEmb = Math.min(390, Math.max(220, dist));
-                            dread.embestidaDestinoX = Math.max(anchoEd + dread.radio, Math.min(w - anchoEd - dread.radio, dread.x + Math.cos(angEmb) * distEmb));
-                            dread.embestidaDestinoY = Math.max(dread.radio + 30, Math.min(h - dread.radio - 30, dread.y + Math.sin(angEmb) * distEmb));
-                            dread.embestidaGolpeo = false;
-                        } else if (r < 0.80) {
-                            // HABILIDAD 5: RAYO BARRIDO DE PLASMA CORRUPTO (Láser gigante de 75 grados)
-                            dread.estado = 'aviso_laser';
-                            dread.inicioEstado = ahora;
-                            dread.laserAnguloInicio = Math.atan2(dy, dx) - 0.65;
-                            dread.laserAnguloActual = dread.laserAnguloInicio;
-                            dread.laserGolpeoJugador = false;
-                        } else if (r < 0.91) {
-                            // HABILIDAD 6: AZOTE DE LÁTIGOS DE TENTÁCULOS BIOLÓGICOS
-                            dread.estado = 'latigos';
-                            dread.inicioEstado = ahora;
-                            dread.latigosGolpeoJugador = false;
+                            dread.esquinaActualIdx = (dread.esquinaActualIdx + 1) % esquinas.length;
+                            dread.esquinaDestinoX = esquinas[dread.esquinaActualIdx].x;
+                            dread.esquinaDestinoY = esquinas[dread.esquinaActualIdx].y;
                         } else {
-                            // HABILIDAD 7: INVOCACIÓN DE ENJAMBRE PARASITARIO (6 Tiránidos brotan de su biomasa)
-                            for (let p = 0; p < 6; p++) {
-                                const angP = (Math.PI * 2 / 6) * p;
-                                estadoNivel6.enemigosNormales.push({
-                                    x: Math.max(anchoEd + 30, Math.min(w - anchoEd - 60, dread.x + Math.cos(angP) * (dread.radio + 25))),
-                                    y: Math.max(70, Math.min(h - 70, dread.y + Math.sin(angP) * (dread.radio + 25))),
-                                    tam: 31,
-                                    vx: 0,
-                                    vy: 2.5,
-                                    vida: 30,
-                                    vidaMax: 30,
-                                    flashHasta: 0,
-                                    pasoAnim: Math.random() * 10,
-                                    esLanzadorAcido: p % 2 === 0,
-                                    ultimoAcido: ahora + 1200
-                                });
-                            }
-                            dread.proximoAtaqueEn = ahora + 2000;
+                            dread.estado = 'aviso_coche';
+                            dread.inicioEstado = ahora;
+                            dread.cocheDestinoX = nRegCx;
+                            dread.cocheDestinoY = nRegCy;
+                            dread.angulo = Math.atan2(dread.cocheDestinoY - dread.y, dread.cocheDestinoX - dread.x);
                         }
                     }
-                } else if (dread.estado === 'rotativo') {
-                    dread.angulo = Math.atan2(dy, dx);
-                    if (ahora - dread.ultimoDisparoRotativo >= 115) {
-                        dread.ultimoDisparoRotativo = ahora;
-                        dread.rafagasDisparadas++;
-                        const spread = Math.sin(dread.rafagasDisparadas * 0.65) * 0.52;
-                        const a = dread.angulo + spread;
-                        estadoNivel6.proyectilesDreadnought.push({
-                            tipo: 'gatling',
-                            x: dread.x + Math.cos(a) * dread.radio,
-                            y: dread.y + Math.sin(a) * dread.radio,
-                            vx: Math.cos(a) * 11.5,
-                            vy: Math.sin(a) * 11.5,
-                            radio: 7,
-                            vida: 85
-                        });
-                    }
-                    if (dread.rafagasDisparadas >= 14) {
-                        dread.estado = 'marchando';
-                        dread.proximoAtaqueEn = ahora + 1700;
-                    }
-                } else if (dread.estado === 'aviso_embestida') {
-                    if (ahora - dread.inicioEstado >= 950) {
-                        dread.estado = 'embistiendo';
+                } else if (dread.estado === 'aviso_esquina') {
+                    const prog = Math.min(1, (ahora - dread.inicioEstado) / 1000);
+                    ctx.save();
+                    ctx.strokeStyle = '#c026d3';
+                    ctx.lineWidth = 4;
+                    ctx.setLineDash([12, 8]);
+                    ctx.beginPath();
+                    ctx.moveTo(dread.x, dread.y);
+                    ctx.lineTo(dread.esquinaDestinoX, dread.esquinaDestinoY);
+                    ctx.stroke();
+
+                    ctx.fillStyle = `rgba(192, 38, 211, ${0.2 + prog * 0.35})`;
+                    ctx.beginPath();
+                    ctx.arc(dread.esquinaDestinoX, dread.esquinaDestinoY, 45, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+
+                    if (prog >= 1) {
+                        dread.estado = 'corriendo_esquina';
                         dread.inicioEstado = ahora;
                     }
-                } else if (dread.estado === 'embistiendo') {
-                    const tEmb = Math.min(1, (ahora - dread.inicioEstado) / 320);
-                    dread.x = dread.embestidaOrigenX + (dread.embestidaDestinoX - dread.embestidaOrigenX) * tEmb;
-                    dread.y = dread.embestidaOrigenY + (dread.embestidaDestinoY - dread.embestidaOrigenY) * tEmb;
+                } else if (dread.estado === 'corriendo_esquina') {
+                    const dxE = dread.esquinaDestinoX - dread.x;
+                    const dyE = dread.esquinaDestinoY - dread.y;
+                    const distE = Math.hypot(dxE, dyE);
 
-                    if (!dread.embestidaGolpeo && Math.hypot(nRegCx - dread.x, nRegCy - dread.y) <= dread.radio + jugador.tam * 0.45) {
-                        dread.embestidaGolpeo = true;
-                        if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) absorberGolpeEscudoContraJefe();
-                        else recibirDanioJugadorNivel6(2);
+                    if (distE > 24) {
+                        const angE = Math.atan2(dyE, dxE);
+                        dread.angulo = angE;
+                        dread.x += Math.cos(angE) * 6.8;
+                        dread.y += Math.sin(angE) * 6.8;
+                    } else {
+                        dread.estado = 'disparando_esquina';
+                        dread.inicioEstado = ahora;
+                        dread.ultimoDisparoEsquina = 0;
+                        dread.finRafagaEsquina = ahora + 2600;
+                    }
+                } else if (dread.estado === 'disparando_esquina') {
+                    const angCentro = Math.atan2(nRegCy - dread.y, nRegCx - dread.x);
+                    dread.angulo = angCentro;
+
+                    if (ahora - dread.ultimoDisparoEsquina >= 100) {
+                        dread.ultimoDisparoEsquina = ahora;
+                        [-0.38, 0, 0.38].forEach(spread => {
+                            const a = angCentro + spread + Math.sin(ahora / 160) * 0.25;
+                            estadoNivel6.proyectilesDreadnought.push({
+                                x: dread.x + Math.cos(a) * dread.radio,
+                                y: dread.y + Math.sin(a) * dread.radio,
+                                vx: Math.cos(a) * 10.5,
+                                vy: Math.sin(a) * 10.5,
+                                radio: 8,
+                                vida: 110
+                            });
+                        });
                     }
 
-                    if (tEmb >= 1) {
-                        estadoNivel6.ondasChoqueDreadnought.push({
+                    if (ahora >= dread.finRafagaEsquina) {
+                        dread.estado = 'patrullando';
+                        dread.proximoAtaqueEn = ahora + 1100;
+                    }
+                } else if (dread.estado === 'aviso_coche') {
+                    const prog = Math.min(1, (ahora - dread.inicioEstado) / 1000);
+                    dread.cocheDestinoX = nRegCx;
+                    dread.cocheDestinoY = nRegCy;
+                    dread.angulo = Math.atan2(dread.cocheDestinoY - dread.y, dread.cocheDestinoX - dread.x);
+
+                    ctx.save();
+                    ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
+                    ctx.lineWidth = 34;
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(dread.x, dread.y);
+                    ctx.lineTo(dread.cocheDestinoX, dread.cocheDestinoY);
+                    ctx.stroke();
+
+                    ctx.translate(dread.x, dread.y - 30);
+                    ctx.rotate(ahora / 120);
+                    ctx.fillStyle = '#dc2626';
+                    ctx.strokeStyle = '#fef08a';
+                    ctx.lineWidth = 2;
+                    ctx.fillRect(-20, -34, 40, 68);
+                    ctx.strokeRect(-20, -34, 40, 68);
+                    ctx.restore();
+
+                    if (prog >= 1) {
+                        const angC = Math.atan2(dread.cocheDestinoY - dread.y, dread.cocheDestinoX - dread.x);
+                        estadoNivel6.cochesLanzadosDreadnought.push({
                             x: dread.x,
                             y: dread.y,
-                            radio: dread.radio * 0.6,
-                            radioMax: 290,
-                            creadoEn: ahora,
-                            golpeoJugador: false
+                            vx: Math.cos(angC) * 13.5,
+                            vy: Math.sin(angC) * 13.5,
+                            rot: angC,
+                            radio: 32,
+                            vida: 95
                         });
-                        dread.estado = 'marchando';
-                        dread.proximoAtaqueEn = ahora + 1800;
+                        dread.estado = 'patrullando';
+                        dread.proximoAtaqueEn = ahora + 1200;
                     }
-                } else if (dread.estado === 'aviso_laser') {
-                    dread.angulo = dread.laserAnguloInicio;
-                    if (ahora - dread.inicioEstado >= 900) {
-                        dread.estado = 'disparando_laser';
+                } else if (dread.estado === 'aviso_punetazo') {
+                    const prog = Math.min(1, (ahora - dread.inicioEstado) / 1000);
+                    dread.angulo = dread.punetazoAngulo;
+
+                    dibujarArcoPunetazoRojoN6(dread.x, dread.y, dread.punetazoAngulo, dread.radio, dread.punetazoAlcance, 0.22 + prog * 0.48);
+
+                    if (prog >= 1) {
+                        dread.estado = 'ejecutando_punetazo';
                         dread.inicioEstado = ahora;
                     }
-                } else if (dread.estado === 'disparando_laser') {
-                    const tLas = Math.min(1, (ahora - dread.inicioEstado) / 850);
-                    dread.laserAnguloActual = dread.laserAnguloInicio + tLas * 1.3;
-                    dread.angulo = dread.laserAnguloActual;
+                } else if (dread.estado === 'ejecutando_punetazo') {
+                    const prog = Math.min(1, (ahora - dread.inicioEstado) / 280);
+                    dibujarArcoPunetazoRojoN6(dread.x, dread.y, dread.punetazoAngulo, dread.radio, dread.punetazoAlcance, 0.92);
 
-                    // Detección de impacto del haz láser contra el jugador
-                    const largoLaser = 620;
-                    const lx2 = dread.x + Math.cos(dread.laserAnguloActual) * largoLaser;
-                    const ly2 = dread.y + Math.sin(dread.laserAnguloActual) * largoLaser;
-                    const distSeg = distanciaPuntoSegmentoN6(nRegCx, nRegCy, dread.x, dread.y, lx2, ly2);
-                    if (!dread.laserGolpeoJugador && distSeg <= 26) {
-                        dread.laserGolpeoJugador = true;
-                        if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) absorberGolpeEscudoContraJefe();
-                        else recibirDanioJugadorNivel6(2);
+                    if (!dread.punetazoGolpeo) {
+                        const distJ = Math.hypot(nRegCx - dread.x, nRegCy - dread.y);
+                        const angJ = Math.atan2(nRegCy - dread.y, nRegCx - dread.x);
+                        const diffAng = Math.abs(normalizarAnguloN6(angJ - dread.punetazoAngulo));
+
+                        if (distJ >= dread.radio * 0.5 && distJ <= dread.punetazoAlcance + jugador.tam * 0.4 && diffAng <= 1.15) {
+                            dread.punetazoGolpeo = true;
+                            if (estadoMarineP2.escudoActivo) bloquearConEscudoInfinitoN6();
+                            else recibirDanioJugadorNivel6(5);
+                        }
+
+                        estadoNivel6.aliados.forEach(al => {
+                            if (!al.vivo) return;
+                            const distA = Math.hypot(al.x - dread.x, al.y - dread.y);
+                            const angA = Math.atan2(al.y - dread.y, al.x - dread.x);
+                            const diffA = Math.abs(normalizarAnguloN6(angA - dread.punetazoAngulo));
+                            if (distA <= dread.punetazoAlcance + al.tam * 0.4 && diffA <= 1.15) {
+                                danarAliadoN6(al, 2, ahora);
+                            }
+                        });
                     }
 
-                    if (tLas >= 1) {
-                        dread.estado = 'marchando';
-                        dread.proximoAtaqueEn = ahora + 1750;
-                    }
-                } else if (dread.estado === 'latigos') {
-                    const tLat = Math.min(1, (ahora - dread.inicioEstado) / 550);
-                    const alcanceLat = dread.radio * 2.15;
-                    if (!dread.latigosGolpeoJugador && dist <= alcanceLat) {
-                        dread.latigosGolpeoJugador = true;
-                        if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) absorberGolpeEscudoContraJefe();
-                        else recibirDanioJugadorNivel6(2);
-                    }
-                    if (tLat >= 1) {
-                        dread.estado = 'marchando';
-                        dread.proximoAtaqueEn = ahora + 1650;
+                    if (prog >= 1) {
+                        dread.estado = 'patrullando';
+                        dread.proximoAtaqueEn = ahora + 1150;
                     }
                 }
-            }
-
-            // Avisos visuales de embestida y rayo láser
-            if (dread.estado === 'aviso_embestida') {
-                ctx.save();
-                ctx.strokeStyle = 'rgba(239, 68, 68, 0.35)';
-                ctx.lineWidth = dread.radio * 1.5;
-                ctx.lineCap = 'round';
-                ctx.beginPath();
-                ctx.moveTo(dread.embestidaOrigenX, dread.embestidaOrigenY);
-                ctx.lineTo(dread.embestidaDestinoX, dread.embestidaDestinoY);
-                ctx.stroke();
-                ctx.restore();
-            }
-
-            if (dread.estado === 'aviso_laser') {
-                ctx.save();
-                ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
-                ctx.lineWidth = 8;
-                ctx.setLineDash([12, 10]);
-                ctx.beginPath();
-                ctx.moveTo(dread.x, dread.y);
-                ctx.lineTo(dread.x + Math.cos(dread.laserAnguloInicio) * 620, dread.y + Math.sin(dread.laserAnguloInicio) * 620);
-                ctx.stroke();
-                ctx.restore();
-            }
-
-            if (dread.estado === 'disparando_laser') {
-                const lx2 = dread.x + Math.cos(dread.laserAnguloActual) * 620;
-                const ly2 = dread.y + Math.sin(dread.laserAnguloActual) * 620;
-                ctx.save();
-                ctx.strokeStyle = 'rgba(168, 85, 247, 0.55)';
-                ctx.lineWidth = 34;
-                ctx.lineCap = 'round';
-                ctx.beginPath();
-                ctx.moveTo(dread.x, dread.y);
-                ctx.lineTo(lx2, ly2);
-                ctx.stroke();
-
-                ctx.strokeStyle = '#38bdf8';
-                ctx.lineWidth = 16;
-                ctx.stroke();
-
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 6;
-                ctx.stroke();
-                ctx.restore();
             }
 
             dibujarDreadnoughtInfectadoTopDownN6(dread, ahora);
@@ -2130,43 +2183,39 @@
             ctx.restore();
         }
 
-        // Proyectiles, Misiles Ícaro y Ondas de Choque del Dreadnought
+        // Ondas visuales de pisadas pesadas
+        estadoNivel6.ondasPisadaDreadnought = estadoNivel6.ondasPisadaDreadnought.filter(op => {
+            const prog = Math.min(1, (ahora - op.creadoEn) / 420);
+            ctx.save();
+            ctx.strokeStyle = `rgba(249, 115, 22, ${1 - prog})`;
+            ctx.lineWidth = 10;
+            ctx.beginPath();
+            ctx.arc(op.x, op.y, op.radio * (0.4 + prog * 0.6), 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+            return prog < 1;
+        });
+
+        // Proyectiles morados del Dreadnought (1 corazón de daño)
         estadoNivel6.proyectilesDreadnought = estadoNivel6.proyectilesDreadnought.filter(p => {
             p.x += p.vx;
             p.y += p.vy;
             p.vida--;
 
             ctx.save();
-            if (p.tipo === 'plasma') {
-                ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.radio + 7, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillStyle = '#38bdf8';
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.radio, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillStyle = '#ecfeff';
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.radio * 0.45, 0, Math.PI * 2);
-                ctx.fill();
-            } else {
-                ctx.fillStyle = '#a855f7';
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.radio, 0, Math.PI * 2);
-                ctx.fill();
-            }
+            ctx.fillStyle = '#d946ef';
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radio, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#fdf4ff';
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radio * 0.45, 0, Math.PI * 2);
+            ctx.fill();
             ctx.restore();
 
             if (Math.hypot(p.x - nRegCx, p.y - nRegCy) <= p.radio + jugador.tam * 0.42) {
-                if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) {
-                    absorberGolpeEscudoContraJefe();
-                } else {
-                    recibirDanioJugadorNivel6(p.tipo === 'plasma' ? 2 : 1);
-                }
-                if (p.tipo === 'plasma') {
-                    estadoNivel6.charcosAcido.push({ x: p.x, y: p.y, radio: 32, expiraEn: ahora + 2400 });
-                }
+                if (estadoMarineP2.escudoActivo) bloquearConEscudoInfinitoN6();
+                else recibirDanioJugadorNivel6(1);
                 return false;
             }
 
@@ -2180,54 +2229,41 @@
             return p.vida > 0 && p.x > anchoEd && p.x < w - anchoEd && p.y > -40 && p.y < h + 40;
         });
 
-        estadoNivel6.avisosMisilesDreadnought = estadoNivel6.avisosMisilesDreadnought.filter(m => {
-            const prog = Math.min(1, (ahora - m.creadoEn) / 1600);
-            if (prog < 1) {
-                ctx.save();
-                ctx.strokeStyle = '#ef4444';
-                ctx.lineWidth = 2.2;
-                ctx.beginPath();
-                ctx.arc(m.x, m.y, m.radio, 0, Math.PI * 2);
-                ctx.stroke();
-                ctx.fillStyle = `rgba(239, 68, 68, ${0.15 + prog * 0.35})`;
-                ctx.beginPath();
-                ctx.arc(m.x, m.y, m.radio * prog, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
-                return true;
-            } else {
-                if (Math.hypot(nRegCx - m.x, nRegCy - m.y) <= m.radio + jugador.tam * 0.4) {
-                    if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) absorberGolpeEscudoContraJefe();
-                    else recibirDanioJugadorNivel6(2);
-                }
-                estadoNivel6.aliados.forEach(al => {
-                    if (al.vivo && Math.hypot(al.x - m.x, al.y - m.y) <= m.radio + al.tam * 0.4) {
-                        danarAliadoN6(al, 1, ahora);
-                    }
-                });
-                return false;
-            }
-        });
-
-        estadoNivel6.ondasChoqueDreadnought = estadoNivel6.ondasChoqueDreadnought.filter(oc => {
-            const prog = Math.min(1, (ahora - oc.creadoEn) / 550);
-            oc.radio = 60 + (oc.radioMax - 60) * prog;
+        // Coches lanzados por el Dreadnought (3 corazones de daño)
+        estadoNivel6.cochesLanzadosDreadnought = estadoNivel6.cochesLanzadosDreadnought.filter(c => {
+            c.x += c.vx;
+            c.y += c.vy;
+            c.rot += 0.25;
+            c.vida--;
 
             ctx.save();
-            ctx.strokeStyle = `rgba(168, 85, 247, ${1 - prog})`;
-            ctx.lineWidth = 8;
+            ctx.translate(c.x, c.y);
+            ctx.rotate(c.rot);
+            ctx.fillStyle = '#991b1b';
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 2.5;
+            ctx.fillRect(-21, -36, 42, 72);
+            ctx.strokeRect(-21, -36, 42, 72);
+            ctx.fillStyle = '#f97316';
             ctx.beginPath();
-            ctx.arc(oc.x, oc.y, oc.radio, 0, Math.PI * 2);
-            ctx.stroke();
+            ctx.arc(0, -14, 12, 0, Math.PI * 2);
+            ctx.fill();
             ctx.restore();
 
-            const distJ = Math.hypot(nRegCx - oc.x, nRegCy - oc.y);
-            if (!oc.golpeoJugador && Math.abs(distJ - oc.radio) <= 22) {
-                oc.golpeoJugador = true;
-                if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) absorberGolpeEscudoContraJefe();
-                else recibirDanioJugadorNivel6(1);
+            if (Math.hypot(c.x - nRegCx, c.y - nRegCy) <= c.radio + jugador.tam * 0.45) {
+                if (estadoMarineP2.escudoActivo) bloquearConEscudoInfinitoN6();
+                else recibirDanioJugadorNivel6(3);
+                return false;
             }
-            return prog < 1;
+
+            for (const al of estadoNivel6.aliados) {
+                if (al.vivo && Math.hypot(c.x - al.x, c.y - al.y) <= c.radio + al.tam * 0.45) {
+                    danarAliadoN6(al, 2, ahora);
+                    return false;
+                }
+            }
+
+            return c.vida > 0 && c.x > anchoEd - 30 && c.x < w - anchoEd + 30 && c.y > -60 && c.y < h + 60;
         });
 
         // Proyectiles del Gran Regente
@@ -2264,7 +2300,7 @@
         estadoNivel6.aliados.forEach(al => dibujarSoldadoAliadoCadianN6(al, ahora));
         dibujarGranRegenteTopDownN6(estadoNivel6.playerX, estadoNivel6.playerY, ahora);
 
-        // Victoria al derrotar al Dreadnought Redemptor Infectado tras limpiar las 15 hordas
+        // Victoria al derrotar al Dreadnought Redemptor Infectado
         if (estadoNivel6.fase === 'combate' &&
             estadoNivel6.jefeFinalInvocado &&
             !estadoNivel6.jefeFinalDreadnought) {
@@ -2276,14 +2312,14 @@
             document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 6 — ¡DREADNOUGHT CORRUPTO DERROTADO!';
         }
 
-        // HUD Superior de progreso de Hordas
+        // HUD Superior
         const tiempoProx = Math.max(0, Math.ceil((estadoNivel6.proximaOleadaEn - ahora) / 1000));
         ctx.save();
         ctx.fillStyle = 'rgba(15, 10, 26, 0.85)';
-        ctx.fillRect(anchoEd + 14, 46, 390, 26);
+        ctx.fillRect(anchoEd + 14, 46, 410, 26);
         ctx.strokeStyle = '#a855f7';
         ctx.lineWidth = 1.5;
-        ctx.strokeRect(anchoEd + 14, 46, 390, 26);
+        ctx.strokeRect(anchoEd + 14, 46, 410, 26);
         ctx.font = 'bold 13px "Courier New", monospace';
         ctx.fillStyle = '#f3e8ff';
         ctx.textAlign = 'left';
@@ -2292,8 +2328,8 @@
             : (estadoNivel6.jefeFinalInvocado
                 ? 'COMBATE FINAL — ¡DESTRUYE AL DREADNOUGHT INFECTADO!'
                 : (estadoNivel6.oleadaActual < estadoNivel6.totalOleadas
-                    ? `HORDA ${estadoNivel6.oleadaActual}/${estadoNivel6.totalOleadas} | PRÓXIMA EN: ${tiempoProx}s`
-                    : 'HORDA 15/15 — ¡ELIMINA A TODOS PARA ENFRENTAR AL JEFE!'));
+                    ? `HORDA ${estadoNivel6.oleadaActual}/${estadoNivel6.totalOleadas} | PRÓXIMA: ${tiempoProx}s | [W] JEFE FINAL`
+                    : 'HORDA 15/15 — ¡ELIMINA A TODOS O PULSA [W]!'));
         ctx.fillText(infoOleada, anchoEd + 24, 63);
 
         if (ahora < estadoNivel6.mensajeAlertaHasta) {
@@ -2321,17 +2357,29 @@
         animacionIdNivel6 = requestAnimationFrame(bucleNivel6);
     }
 
-    function distanciaPuntoSegmentoN6(px, py, x1, y1, x2, y2) {
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const l2 = dx * dx + dy * dy;
-        if (l2 === 0) return Math.hypot(px - x1, py - y1);
-        const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / l2));
-        return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+    function dibujarArcoPunetazoRojoN6(cx, cy, angulo, radioInterior, radioExterior, opacidad) {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(angulo);
+        ctx.fillStyle = `rgba(239, 68, 68, ${opacidad})`;
+        ctx.strokeStyle = '#fca5a5';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, radioExterior, -1.15, 1.15, false);
+        ctx.arc(0, 0, radioInterior * 0.72, 1.15, -1.15, true);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    function normalizarAnguloN6(a) {
+        while (a > Math.PI) a -= Math.PI * 2;
+        while (a < -Math.PI) a += Math.PI * 2;
+        return a;
     }
 
     function impactarEnemigosN6(bala, ahora) {
-        // 0. Impacto contra el Jefe Final: Dreadnought Redemptor Infectado (50,000 HP)
         if (estadoNivel6.jefeFinalDreadnought) {
             const df = estadoNivel6.jefeFinalDreadnought;
             if (Math.hypot(bala.x - df.x, bala.y - df.y) <= df.radio) {
@@ -2340,15 +2388,13 @@
                 if (df.vida <= 0) {
                     estadoNivel6.jefeFinalDreadnought = null;
                     estadoNivel6.proyectilesDreadnought = [];
-                    estadoNivel6.avisosMisilesDreadnought = [];
-                    estadoNivel6.ondasChoqueDreadnought = [];
-                    estadoNivel6.enemigosNormales = [];
+                    estadoNivel6.cochesLanzadosDreadnought = [];
+                    estadoNivel6.ondasPisadaDreadnought = [];
                 }
                 return true;
             }
         }
 
-        // 1. Impacto contra Depredadores Alfa (3,000 HP)
         for (let i = 0; i < estadoNivel6.jefesAlfa.length; i++) {
             const j = estadoNivel6.jefesAlfa[i];
             if (Math.hypot(bala.x - j.x, bala.y - j.y) <= j.radio) {
@@ -2359,7 +2405,6 @@
             }
         }
 
-        // 2. Impacto contra Monstruos Normales
         for (let i = 0; i < estadoNivel6.enemigosNormales.length; i++) {
             const en = estadoNivel6.enemigosNormales[i];
             if (bala.x >= en.x && bala.x <= en.x + en.tam && bala.y >= en.y && bala.y <= en.y + en.tam) {
@@ -2370,7 +2415,6 @@
             }
         }
 
-        // 3. Impacto contra Guardianes Élites
         for (let i = 0; i < estadoNivel6.guardianesElites.length; i++) {
             const g = estadoNivel6.guardianesElites[i];
             if (bala.x >= g.x && bala.x <= g.x + g.tam && bala.y >= g.y && bala.y <= g.y + g.tam) {
@@ -2397,13 +2441,15 @@
         const ahora = Date.now();
         if (ahora < jugador.invulnerableHasta || jugador.vidas <= 0) return;
 
-        if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) {
+        // El escudo nunca se rompe ni tiene límite de uso
+        if (estadoMarineP2.escudoActivo) {
+            bloquearConEscudoInfinitoN6();
             return;
         }
 
         jugador.vidas = Math.max(0, jugador.vidas - cantidad);
         jugador.invulnerableHasta = ahora + 1100;
-        actualizarCorazonesUI();
+        if (typeof actualizarCorazonesUI === 'function') actualizarCorazonesUI();
 
         if (jugador.vidas <= 0) {
             puedeMoverse = false;

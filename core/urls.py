@@ -20,7 +20,7 @@ api_urlpatterns = [
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', views.bienvenida, name='inicio'),
-    path('arcade/', TemplateView.as_view(template_name='arcade.html'), name='arcade'),
+    path('arcade/', TemplateView.as_view(template_name='arcade/arcade.html'), name='arcade'),
     path('accounts/', include('allauth.urls')),
     
     # API REST

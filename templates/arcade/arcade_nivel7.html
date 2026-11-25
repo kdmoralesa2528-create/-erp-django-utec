@@ -6,6 +6,19 @@
        - /static/audio/Jagged_Steel_Teeth.mp3 (Fase 2 - Modo Enojado <= 7,000 HP)
      ============================================================ -->
 <script>
+    // Limpia cualquier bloque duplicado de "ARCADE — PARTE 2" si dos plantillas lo renderizaron
+    document.addEventListener('DOMContentLoaded', () => {
+        const titulosParte2 = Array.from(document.querySelectorAll('h1, h2, h3, div, p')).filter(
+            el => el.children.length === 0 && el.textContent.includes('ARCADE — PARTE 2')
+        );
+        if (titulosParte2.length > 1) {
+            for (let i = 1; i < titulosParte2.length; i++) {
+                const contenedor = titulosParte2[i].closest('section, .arcade-parte2, .nivel-seccion') || titulosParte2[i].parentElement;
+                if (contenedor) contenedor.style.display = 'none';
+            }
+        }
+    });
+
     let animacionIdNivel7 = null;
     let playerN7 = null;
     let jefeTV_N7 = null;
@@ -65,6 +78,19 @@
             musicaNivel7.audioFase2.currentTime = 0;
         }
         musicaNivel7.pistaActiva = 0;
+    }
+
+    function mantenerEscudoInfinitoN7() {
+        estadoMarineP2.escudoRoto = false;
+        estadoMarineP2.escudoGolpesRestantes = 999;
+
+        const hudEnergia = document.getElementById('cargas-energia');
+        if (hudEnergia && Number(nivelActual) === 7) {
+            hudEnergia.textContent = estadoMarineP2.escudoActivo
+                ? '🛡️ ESCUDO ACTIVO (∞)'
+                : '🛡️ [E] ESCUDO INFINITO (∞)';
+            hudEnergia.style.color = '#38bdf8';
+        }
     }
 
     const motorGraficoN7 = {
@@ -401,13 +427,26 @@
 
     function iniciarNivel7() {
         cancelAnimationFrame(animacionIdNivel7);
-        clearInterval(intervaloContador);
+        if (typeof intervaloContador !== 'undefined') clearInterval(intervaloContador);
         textoContador = '';
+
+        // CORRECCIÓN PRINCIPAL: Forzar estado activo y nivelActual numérico 7
+        // para que el bucle no aborte en el primer frame dejando el canvas negro.
+        juegoActivo = true;
+        nivelActual = 7;
 
         inicializarMotorPixelShaderN7();
 
         if (typeof activarPantallaCompletaParte2 === 'function') {
             activarPantallaCompletaParte2();
+        }
+
+        // Garantizar que el canvas tenga dimensiones válidas antes de calcular posiciones
+        if (!canvas.width || canvas.width < 100) {
+            canvas.width = canvas.clientWidth || window.innerWidth || 1000;
+        }
+        if (!canvas.height || canvas.height < 100) {
+            canvas.height = canvas.clientHeight || window.innerHeight || 650;
         }
 
         const w = canvas.width;
@@ -420,17 +459,17 @@
         if (typeof actualizarCorazonesUI === 'function') actualizarCorazonesUI();
 
         estadoMarineP2.escudoActivo = false;
-        estadoMarineP2.escudoGolpesRestantes = 3;
+        estadoMarineP2.escudoGolpesRestantes = 999;
         estadoMarineP2.escudoRoto = false;
         estadoMarineP2.disparando = false;
         estadoMarineP2.balas = [];
         estadoMarineP2.particulas = [];
         estadoMarineP2.anguloTopDown = -Math.PI / 2;
-        if (typeof actualizarHudMarineP2 === 'function') actualizarHudMarineP2();
+        mantenerEscudoInfinitoN7();
 
         const hudDerecha = document.querySelector('.hud-juego span:last-child');
         if (hudDerecha) {
-            hudDerecha.textContent = '[← → ↑ ↓ / WASD] MOVER | [ESPACIO] DISPARAR | [E] ESCUDO';
+            hudDerecha.textContent = '[← → ↑ ↓ / WASD] MOVER | [ESPACIO] DISPARAR | [E] ESCUDO (∞)';
         }
 
         playerN7 = {
@@ -505,7 +544,7 @@
 
     // Tecla rápida [H] opcional de prueba para bajar 1,000 HP al jefe
     window.addEventListener('keydown', e => {
-        if (juegoActivo && nivelActual === 7 && e.code === 'KeyH' && jefeTV_N7 && !jefeTV_N7.muerto) {
+        if (juegoActivo && Number(nivelActual) === 7 && e.code === 'KeyH' && jefeTV_N7 && !jefeTV_N7.muerto) {
             jefeTV_N7.vida = Math.max(0, jefeTV_N7.vida - 1000);
             jefeTV_N7.flashHasta = Date.now() + 90;
             jefeTV_N7.glitchHasta = Date.now() + 260;
@@ -513,26 +552,22 @@
     });
 
     // ============================================================
-    // SISTEMA DE DAÑO AL JUGADOR Y ESCUDO [E] EN NIVEL 7
+    // SISTEMA DE DAÑO AL JUGADOR Y ESCUDO INFINITO [E] EN NIVEL 7
     // ============================================================
     function daniarJugadorN7(ahora, px, py) {
         if (jugador.vidas <= 0) return;
 
-        if (estadoMarineP2.escudoActivo && !estadoMarineP2.escudoRoto) {
-            estadoMarineP2.escudoGolpesRestantes--;
-            jugador.invulnerableHasta = ahora + 450;
+        // El escudo nunca se rompe ni tiene límite de uso
+        if (estadoMarineP2.escudoActivo) {
+            mantenerEscudoInfinitoN7();
+            jugador.invulnerableHasta = Math.max(jugador.invulnerableHasta, ahora + 220);
             floatingTextsN7.push({
                 x: px,
                 y: py - 24,
-                texto: estadoMarineP2.escudoGolpesRestantes > 0 ? `ESCUDO (${estadoMarineP2.escudoGolpesRestantes})` : '¡ESCUDO ROTO!',
+                texto: '🛡️ BLOQUEADO (∞)',
                 color: '#38bdf8',
-                vida: 45
+                vida: 35
             });
-            if (estadoMarineP2.escudoGolpesRestantes <= 0) {
-                estadoMarineP2.escudoActivo = false;
-                estadoMarineP2.escudoRoto = true;
-            }
-            if (typeof actualizarHudMarineP2 === 'function') actualizarHudMarineP2();
             return;
         }
 
@@ -555,7 +590,7 @@
             detenerMusicaNivel7();
             textoContador = '¡SEÑAL INTERRUMPIDA! (GAME OVER)';
             setTimeout(() => {
-                if (juegoActivo && nivelActual === 7 && jugador.vidas <= 0) {
+                if (juegoActivo && Number(nivelActual) === 7 && jugador.vidas <= 0) {
                     iniciarNivel7();
                 }
             }, 2200);
@@ -761,7 +796,7 @@
                     });
                 }
                 setTimeout(() => {
-                    if (!juegoActivo || nivelActual !== 7 || !jefeTV_N7 || jefeTV_N7.muerto) return;
+                    if (!juegoActivo || Number(nivelActual) !== 7 || !jefeTV_N7 || jefeTV_N7.muerto) return;
                     for (let i = 0; i < brazos; i++) {
                         const ang = tv.anguloEspiral + 0.26 + (Math.PI * 2 / brazos) * i;
                         proyectilesJefeN7.push({
@@ -1952,10 +1987,14 @@
     // BUCLE PRINCIPAL DEL NIVEL 7
     // ============================================================
     function bucleNivel7() {
-        if (!juegoActivo || nivelActual !== 7) {
+        if (!juegoActivo || Number(nivelActual) !== 7) {
             detenerMusicaNivel7();
             return;
         }
+
+        // Mantener el escudo sin límite de uso en todo momento
+        mantenerEscudoInfinitoN7();
+
         const ahora = Date.now();
         const w = canvas.width;
         const h = canvas.height;

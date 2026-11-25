@@ -14,6 +14,80 @@
     .nivel-1 { background: linear-gradient(135deg, #2ec4b6, #1b9aaa); }
     .nivel-2 { background: linear-gradient(135deg, #ff9f1c, #e76f51); }
     .nivel-3 { background: linear-gradient(135deg, #e63946, #9d0208); }
+    .nivel-5 { background: linear-gradient(135deg, #4338ca, #312e81); border: 1.5px solid #818cf8; }
+    .nivel-6 { background: linear-gradient(135deg, #a21caf, #6b21a8); border: 1.5px solid #e879f9; }
+    .nivel-7 { background: linear-gradient(135deg, #dc2626, #450a0a); border: 1.5px solid #facc15; }
+
+    /* ============================================================
+       MENÚ DESPLEGABLE HACIA ARRIBA (DROPUP) AL PASAR EL MOUSE
+       ============================================================ */
+    .grupo-nivel-dropup {
+        position: relative;
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    /* Puente invisible para que no se cierre al subir el mouse al recuadro */
+    .grupo-nivel-dropup::before {
+        content: "";
+        position: absolute;
+        bottom: 100%;
+        left: 0;
+        width: 100%;
+        height: 16px;
+    }
+
+    .menu-subniveles-arriba {
+        position: absolute;
+        bottom: calc(100% + 12px);
+        left: 50%;
+        transform: translateX(-50%) translateY(8px);
+        min-width: 195px;
+        background: rgba(13, 10, 26, 0.97);
+        border: 2px solid #e879f9;
+        border-radius: 12px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        box-shadow: 0 0 24px rgba(217, 70, 239, 0.65);
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition: all 0.2s ease;
+        z-index: 60;
+    }
+
+    .grupo-nivel-dropup:hover .menu-subniveles-arriba {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        transform: translateX(-50%) translateY(0);
+    }
+
+    .btn-subnivel {
+        width: 100%;
+        padding: 9px 14px;
+        background: linear-gradient(135deg, #701a75, #a21caf);
+        border: 1.5px solid #f0abfc;
+        border-radius: 8px;
+        color: #ffffff;
+        font-family: 'Courier New', monospace;
+        font-weight: bold;
+        font-size: 0.92rem;
+        letter-spacing: 1px;
+        cursor: pointer;
+        text-align: center;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .btn-subnivel:hover {
+        transform: scale(1.04);
+        box-shadow: 0 0 12px rgba(240, 171, 252, 0.85);
+        background: linear-gradient(135deg, #86198f, #c026d3);
+    }
+
     .pantalla-negra { display: none; width: 100%; background: #000; border: 2px solid #d4af37; border-radius: 12px; padding: 1rem; margin-top: 1.5rem; flex-direction: column; align-items: center; box-sizing: border-box; }
     #juego-canvas { background: #000; display: block; margin: 0 auto; width: 100%; max-width: 100%; height: auto; border: 1px solid #222; }
     .hud-juego { display: flex; justify-content: space-between; align-items: center; font-family: 'Courier New', monospace; font-size: 0.95rem; width: 100%; margin-top: 0.8rem; color: #adb5bd; }
@@ -148,17 +222,52 @@
         <button id="btn-nivel-4" class="btn-nivel-secreto" onclick="abrirNivel(4, false)">
             🌌 NIVEL SECRETO: GALAXIA
         </button>
+
+        <!-- ============================================================
+             ARCADE — PARTE 2 (Con menú superior al pasar el mouse en Nivel 6)
+             ============================================================ -->
+        <div id="seccion-parte-2" style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1.5px dashed #a855f7;">
+            <h3 style="font-family: 'Courier New', monospace; color: #e879f9; letter-spacing: 3px; margin-bottom: 0.3rem;">
+                ARCADE — PARTE 2 🌀
+            </h3>
+            <p style="color: #c084fc; font-size: 0.9rem; margin-bottom: 1.4rem;">
+                El Portal Dimensional ha sido abierto
+            </p>
+
+            <div class="niveles-grid" style="align-items: center;">
+                <button class="btn-nivel nivel-5" onclick="abrirNivel(5, false)">
+                    🛡️ NIVEL 5
+                </button>
+
+                <!-- Contenedor con despliegue hacia arriba al pasar el mouse -->
+                <div class="grupo-nivel-dropup">
+                    <div class="menu-subniveles-arriba">
+                        <button type="button" class="btn-subnivel" onclick="abrirNivel(6.1, false)">
+                            ⚡ NIVEL 6.1
+                        </button>
+                    </div>
+
+                    <button type="button" class="btn-nivel nivel-6" onclick="abrirNivel(6, false)">
+                        🔮 NIVEL 6
+                    </button>
+                </div>
+
+                <button class="btn-nivel nivel-7" onclick="abrirNivel(7, false)">
+                    🔥 NIVEL 7
+                </button>
+            </div>
+        </div>
     </div>
 
     <div class="pantalla-negra" id="pantalla-juego">
         <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 0.6rem; font-family: 'Courier New', monospace;">
             <span id="titulo-nivel-activo" style="color: #d4af37; font-weight: bold;">NIVEL 1</span>
             <div style="display: flex; gap: 10px; align-items: center;">
-            <button id="btn-pausa-n4" class="btn-mini" onclick="alternarPausaNivel4()" style="display: none; border-color: #ffd60a; color: #ffd60a;">
-                ⏸ Pausa [P]
-            </button>
-            <button class="btn-mini" onclick="volverAlMenu()">✕ Salir</button>
-        </div>
+                <button id="btn-pausa-n4" class="btn-mini" onclick="alternarPausaNivel4()" style="display: none; border-color: #ffd60a; color: #ffd60a;">
+                    ⏸ Pausa [P]
+                </button>
+                <button class="btn-mini" onclick="volverAlMenu()">✕ Salir</button>
+            </div>
         </div>
         <canvas id="juego-canvas" width="800" height="440"></canvas>
         <div class="hud-juego">
@@ -171,12 +280,10 @@
     <a href="/" class="btn-volver">← Volver al ERP</a>
 </div>
 
-
-
 <script>
     const canvas = document.getElementById('juego-canvas');
     const ctx = canvas.getContext('2d');
-// Parche global de rendimiento (60 FPS fluidos en Nivel 1, 2, 3 y 4)
+    // Parche global de rendimiento (60 FPS fluidos)
     Object.defineProperty(ctx, 'shadowBlur', {
         get() { return 0; },
         set() { /* Desactivado para mantener 60 FPS estables */ }
@@ -218,6 +325,7 @@
         const badgeExtremo2 = document.getElementById('badge-extremo-2');
         if (btnExtremo2) btnExtremo2.style.display = copasGanadas[2] ? 'inline-block' : 'none';
         if (badgeExtremo2) badgeExtremo2.style.visibility = extremosGanados[2] ? 'visible' : 'hidden';
+
         const btnNivel4 = document.getElementById('btn-nivel-4');
         if (btnNivel4) {
             btnNivel4.style.display = (total >= 3) ? 'inline-block' : 'none';
@@ -458,7 +566,6 @@
         });
         particulasMuerte = particulasMuerte.filter(p => p.vida > 0);
     }
-
 
     function actualizarJefe() {
         if (!puedeMoverse || jugador.vidas <= 0 || jefe.vida <= 0 || jefe.muriendo) return;
@@ -927,46 +1034,102 @@
 
         juegoActivo = true;
         cancelAnimationFrame(animacionId);
+
         if (nivel === 2 && typeof iniciarNivel2 === 'function') {
             iniciarNivel2();
+            iniciarCuentaRegresiva();
         } else if (nivel === 3 && typeof iniciarNivel3 === 'function') {
             iniciarNivel3();
+            iniciarCuentaRegresiva();
         } else if (nivel === 4 && typeof iniciarNivel4 === 'function') {
             iniciarNivel4();
+            iniciarCuentaRegresiva();
+        } else if (nivel === 5 && typeof iniciarNivel5 === 'function') {
+            iniciarNivel5();
+        } else if (nivel === 6 && typeof iniciarNivel6 === 'function') {
+            iniciarNivel6();
+        } else if (nivel === 6.1 && typeof iniciarNivel6_1 === 'function') {
+            iniciarNivel6_1();
+        } else if (nivel === 7 && typeof iniciarNivel7 === 'function') {
+            iniciarNivel7();
         } else {
             bucleJuego();
+            iniciarCuentaRegresiva();
         }
-        iniciarCuentaRegresiva();
     }
 
-   function volverAlMenu() {
+    function volverAlMenu() {
         juegoActivo = false;
         puedeMoverse = false;
         clearInterval(intervaloContador);
         cancelAnimationFrame(animacionId);
-        if (typeof animacionIdNivel2 !== 'undefined') {
-            cancelAnimationFrame(animacionIdNivel2);
-        }
+
+        if (typeof animacionIdNivel2 !== 'undefined') cancelAnimationFrame(animacionIdNivel2);
         if (typeof animacionIdNivel3 !== 'undefined') {
             cancelAnimationFrame(animacionIdNivel3);
             if (typeof restaurarCanvasNivel3 === 'function') restaurarCanvasNivel3();
         }
-        if (typeof animacionIdNivel4 !== 'undefined') {
-            cancelAnimationFrame(animacionIdNivel4);
-        }
-        if (typeof restaurarPantallaNivel4 === 'function') {
-            restaurarPantallaNivel4();
-        }
+        if (typeof animacionIdNivel4 !== 'undefined') cancelAnimationFrame(animacionIdNivel4);
+        if (typeof restaurarPantallaNivel4 === 'function') restaurarPantallaNivel4();
+
+        if (typeof animacionIdNivel5 !== 'undefined') cancelAnimationFrame(animacionIdNivel5);
+        if (typeof animacionIdNivel6 !== 'undefined') cancelAnimationFrame(animacionIdNivel6);
+        if (typeof animacionIdNivel6_1 !== 'undefined') cancelAnimationFrame(animacionIdNivel6_1);
+        if (typeof animacionIdNivel7 !== 'undefined') cancelAnimationFrame(animacionIdNivel7);
+
+        if (typeof detenerMusicaNivel6_1 === 'function') detenerMusicaNivel6_1();
+        if (typeof detenerMusicaNivel7 === 'function') detenerMusicaNivel7();
+        if (typeof restaurarPantallaParte2 === 'function') restaurarPantallaParte2();
+
         document.getElementById('pantalla-juego').style.display = 'none';
         document.getElementById('menu-niveles').style.display = 'block';
     }
+
     actualizarTrofeosUI();
 </script>
 <audio id="musica-fase2-n4" src="{% static 'audio/Herald_of_the_Last_Gate.mp3' %}" loop preload="auto"></audio>
-{% include 'arcade_nivel2.html' %}
-{% include 'arcade_nivel3.html' %}
-{% include 'arcade_nivel4.html' %}
-{% include 'arcade_nivel5.html' %}
-{% include 'arcade_nivel6.html' %}
-{% include 'arcade_nivel7.html' %}
+{% include 'arcade/arcade_nivel2.html' %}
+{% include 'arcade/arcade_nivel3.html' %}
+{% include 'arcade/arcade_nivel4.html' %}
+{% include 'arcade/arcade_nivel5.html' %}
+{% include 'arcade/arcade_nivel6.html' %}
+{% include 'arcade/arcade_nivel6.1.html' %}
+{% include 'arcade/arcade_nivel7.html' %}
+<script>
+    // 1. Limpia cualquier duplicado de "ARCADE — PARTE 2" inyectado por archivos incluidos
+    document.addEventListener('DOMContentLoaded', () => {
+        const menu = document.getElementById('menu-niveles');
+        if (!menu) return;
+
+        const bloques = Array.from(menu.children);
+        bloques.forEach(el => {
+            if (el.id !== 'seccion-parte-2' && el.textContent && el.textContent.includes('PARTE 2')) {
+                el.remove();
+            }
+        });
+    });
+
+    // 2. Garantiza que abrirNivel(6.1) siempre ejecute iniciarNivel6_1() aunque otro script haya sobrescrito abrirNivel
+    const _abrirNivelOriginal = window.abrirNivel;
+    window.abrirNivel = function (nivel, extremo = false) {
+        if (nivel === 6.1) {
+            nivelActual = 6.1;
+            modoExtremo = false;
+            document.getElementById('menu-niveles').style.display = 'none';
+            document.getElementById('pantalla-juego').style.display = 'flex';
+            document.getElementById('titulo-nivel-activo').textContent = 'NIVEL 6.1 — PREPÁRATE...';
+            juegoActivo = true;
+            if (typeof animacionId !== 'undefined') cancelAnimationFrame(animacionId);
+            if (typeof iniciarNivel6_1 === 'function') {
+                iniciarNivel6_1();
+            } else {
+                alert('Error: No se cargó iniciarNivel6_1() desde arcade_nivel6.1.html');
+            }
+            return;
+        }
+        if (typeof _abrirNivelOriginal === 'function') {
+            _abrirNivelOriginal(nivel, extremo);
+        }
+    };
+</script>
 {% endblock %}

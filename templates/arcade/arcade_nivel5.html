@@ -77,24 +77,41 @@
     };
 
     // ============================================================
-    // 1. INYECCIÓN DE INTERFAZ DE PARTE 2 EN EL MENÚ SIN TOCAR arcade.html
+    // 1. DEJAR UN SOLO MENÚ DE PARTE 2 (ELIMINA EL DUPLICADO)
     // ============================================================
     function inicializarUIParte2() {
         const menuNiveles = document.getElementById('menu-niveles');
-        if (menuNiveles && !document.getElementById('contenedor-parte2')) {
-            const bloqueP2 = document.createElement('div');
-            bloqueP2.id = 'contenedor-parte2';
-            bloqueP2.innerHTML = `
-                <h4 style="color: #e0aaff; letter-spacing: 2px; margin-bottom: 0.4rem;">🌀 ARCADE — PARTE 2 🌀</h4>
-                <p style="color: #9d4edd; font-size: 0.9rem; margin-bottom: 1.2rem;">El Abismo Dimensional ha sido abierto</p>
-                <div class="niveles-grid">
-                    <button class="btn-nivel nivel-5" onclick="abrirNivel(5, false)">🟣 NIVEL 5: PUENTE Y CIUDAD</button>
-                    <button class="btn-nivel nivel-6" onclick="abrirNivel(6, false)">🔮 NIVEL 6</button>
-                    <button class="btn-nivel nivel-7" onclick="abrirNivel(7, false)">🔥 NIVEL 7</button>
-                </div>
-            `;
-            menuNiveles.appendChild(bloqueP2);
-        }
+        if (!menuNiveles) return;
+
+        // Borrar cualquier contenedor de Parte 2 que hayan creado nivel 6 o nivel 7
+        document.querySelectorAll('#contenedor-parte2').forEach(el => el.remove());
+        Array.from(menuNiveles.children).forEach(hijo => {
+            const txt = (hijo.textContent || '').toUpperCase();
+            if (txt.includes('ARCADE') && txt.includes('PARTE 2')) {
+                hijo.remove();
+            }
+        });
+
+        // Crear el único bloque oficial de Parte 2
+        const bloqueP2 = document.createElement('div');
+        bloqueP2.id = 'contenedor-parte2';
+        bloqueP2.innerHTML = `
+            <h4 style="color: #e0aaff; letter-spacing: 2px; margin-bottom: 0.4rem;">🌀 ARCADE — PARTE 2 🌀</h4>
+            <p style="color: #9d4edd; font-size: 0.9rem; margin-bottom: 1.2rem;">El Abismo Dimensional ha sido abierto</p>
+            <div class="niveles-grid">
+                <button type="button" class="btn-nivel nivel-5" id="btn-p2-n5">🟣 NIVEL 5: PUENTE Y CIUDAD</button>
+                <button type="button" class="btn-nivel nivel-6" id="btn-p2-n6">🔮 NIVEL 6</button>
+                <button type="button" class="btn-nivel nivel-6" id="btn-p2-n6-1">🔮 NIVEL 6.1</button>
+                <button type="button" class="btn-nivel nivel-7" id="btn-p2-n7">🔥 NIVEL 7</button>
+            </div>
+        `;
+        menuNiveles.appendChild(bloqueP2);
+
+        // Conectar botones directamente
+        document.getElementById('btn-p2-n5').onclick = () => arrancarNivelParte2(5, false);
+        document.getElementById('btn-p2-n6').onclick = () => arrancarNivelParte2(6, false);
+        document.getElementById('btn-p2-n6-1').onclick = () => arrancarNivelParte2(6.1, false);
+        document.getElementById('btn-p2-n7').onclick = () => arrancarNivelParte2(7, false);
 
         const trofeosCorner = document.querySelector('.trofeos-corner');
         if (trofeosCorner && !document.getElementById('copa-ojo-n4')) {
@@ -128,8 +145,11 @@
     function activarPantallaCompletaParte2() {
         const pantalla = document.getElementById('pantalla-juego');
         if (pantalla) pantalla.classList.add('fullscreen-parte2');
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        const c = document.getElementById('juego-canvas');
+        if (c) {
+            c.width = window.innerWidth || 1000;
+            c.height = window.innerHeight || 650;
+        }
         if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
             document.documentElement.requestFullscreen().catch(() => {});
         }
@@ -138,17 +158,23 @@
     function restaurarPantallaParte2() {
         const pantalla = document.getElementById('pantalla-juego');
         if (pantalla) pantalla.classList.remove('fullscreen-parte2');
-        canvas.width = 800;
-        canvas.height = 440;
+        const c = document.getElementById('juego-canvas');
+        if (c) {
+            c.width = 800;
+            c.height = 440;
+        }
         if (document.fullscreenElement && document.exitFullscreen) {
             document.exitFullscreen().catch(() => {});
         }
     }
 
     window.addEventListener('resize', () => {
-        if (juegoActivo && nivelActual >= 5) {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+        if (juegoActivo && Number(nivelActual) >= 5) {
+            const c = document.getElementById('juego-canvas');
+            if (c) {
+                c.width = window.innerWidth || c.clientWidth || 1000;
+                c.height = window.innerHeight || c.clientHeight || 650;
+            }
         }
     });
 
@@ -158,7 +184,7 @@
     const teclasExtraP2 = { KeyW: false, KeyA: false, KeyS: false, KeyD: false };
 
     window.addEventListener('keydown', e => {
-        if (!juegoActivo || nivelActual < 5) return;
+        if (!juegoActivo || Number(nivelActual) < 5) return;
 
         if (e.code in teclasExtraP2) teclasExtraP2[e.code] = true;
 
@@ -166,7 +192,7 @@
         if (e.code === 'ArrowRight' || e.code === 'KeyD') estadoMarineP2.direccion = 1;
 
         if (e.code === 'KeyS' && !e.repeat) {
-            if (nivelActual === 5 && typeof modoArenaTopDownN5 !== 'undefined' && !modoArenaTopDownN5) {
+            if (Number(nivelActual) === 5 && typeof modoArenaTopDownN5 !== 'undefined' && !modoArenaTopDownN5) {
                 e.preventDefault();
                 saltarJugadorNivel5();
             }
@@ -207,9 +233,9 @@
     function actualizarHudMarineP2() {
         const hudEnergia = document.getElementById('cargas-energia');
         const hudDerecha = document.querySelector('.hud-juego span:last-child');
-        const enTopDown = (nivelActual === 5 && typeof modoArenaTopDownN5 !== 'undefined' && modoArenaTopDownN5);
+        const enTopDown = (Number(nivelActual) === 5 && typeof modoArenaTopDownN5 !== 'undefined' && modoArenaTopDownN5);
 
-        if (hudDerecha && nivelActual >= 5) {
+        if (hudDerecha && Number(nivelActual) >= 5) {
             hudDerecha.textContent = enTopDown
                 ? '[← → ↑ ↓ / WASD] MOVER | AUTO-APUNTADO ACTIVO'
                 : '[← →] MOVER | [S] SALTAR';
@@ -357,9 +383,9 @@
         ctx.beginPath();
         ctx.moveTo(-radio * 0.82, -radio * 0.05);
         ctx.bezierCurveTo(-radio * 0.85, -radio * 1.05, radio * 0.85, -radio * 1.05, radio * 0.85, -radio * 0.05);
-        ctx.lineTo(radio * 0.72, radio * 0.65);
+        ctx.lineTo(radio * 0.72, 0.65 * radio);
         ctx.lineTo(0, radio * 0.92);
-        ctx.lineTo(-radio * 0.72, radio * 0.65);
+        ctx.lineTo(-radio * 0.72, 0.65 * radio);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
@@ -494,46 +520,54 @@
     }
 
     // ============================================================
-    // 4. ENGANCHE CON abrirNivel Y volverAlMenu DE arcade.html
+    // 4. ARRANQUE DIRECTO PARA NIVEL 5, 6 Y 7 (SIN PANTALLA NEGRA)
     // ============================================================
-    const _abrirNivelOriginal = abrirNivel;
-    abrirNivel = function(nivel, extremo = false) {
-        if (nivel >= 5) {
-            nivelActual = nivel;
-            modoExtremo = extremo;
-            document.getElementById('menu-niveles').style.display = 'none';
-            document.getElementById('pantalla-juego').style.display = 'flex';
-            document.getElementById('titulo-nivel-activo').textContent = `PARTE 2 — NIVEL ${nivel}`;
+    function arrancarNivelParte2(numNivel, extremo = false) {
+        numNivel = Number(numNivel);
+        nivelActual = numNivel;
+        modoExtremo = extremo;
 
-            estadoMarineP2.escudoActivo = false;
-            estadoMarineP2.escudoGolpesRestantes = 3;
-            estadoMarineP2.escudoRoto = false;
-            estadoMarineP2.disparando = false;
-            estadoMarineP2.direccion = 1;
-            estadoMarineP2.anguloTopDown = 0;
-            estadoMarineP2.balas = [];
-            estadoMarineP2.particulas = [];
-            actualizarHudMarineP2();
+        if (typeof animacionId !== 'undefined') cancelAnimationFrame(animacionId);
+        if (typeof animacionIdNivel5 !== 'undefined') cancelAnimationFrame(animacionIdNivel5);
+        if (typeof animacionIdNivel6 !== 'undefined') cancelAnimationFrame(animacionIdNivel6);
+        if (typeof animacionIdNivel6_1 !== 'undefined') cancelAnimationFrame(animacionIdNivel6_1);
+        if (typeof animacionIdNivel7 !== 'undefined') cancelAnimationFrame(animacionIdNivel7);
+        if (typeof intervaloContador !== 'undefined') clearInterval(intervaloContador);
+        textoContador = '';
 
-            juegoActivo = true;
-            cancelAnimationFrame(animacionId);
+        document.getElementById('menu-niveles').style.display = 'none';
+        document.getElementById('pantalla-juego').style.display = 'flex';
+        document.getElementById('titulo-nivel-activo').textContent = `PARTE 2 — NIVEL ${numNivel}`;
 
-            if (nivel === 5 && typeof iniciarNivel5 === 'function') iniciarNivel5();
-            else if (nivel === 6 && typeof iniciarNivel6 === 'function') iniciarNivel6();
-            else if (nivel === 7 && typeof iniciarNivel7 === 'function') iniciarNivel7();
+        estadoMarineP2.escudoActivo = false;
+        estadoMarineP2.escudoGolpesRestantes = 3;
+        estadoMarineP2.escudoRoto = false;
+        estadoMarineP2.disparando = false;
+        estadoMarineP2.direccion = 1;
+        estadoMarineP2.anguloTopDown = 0;
+        estadoMarineP2.balas = [];
+        estadoMarineP2.particulas = [];
+        actualizarHudMarineP2();
 
-            if (nivel !== 5) {
-                iniciarCuentaRegresiva();
+        juegoActivo = true;
+
+        requestAnimationFrame(() => {
+            if (numNivel === 5 && typeof iniciarNivel5 === 'function') iniciarNivel5();
+            else if (numNivel === 6 && typeof iniciarNivel6 === 'function') iniciarNivel6();
+            else if (numNivel === 6.1) {
+                if (typeof iniciarNivel6_1 === 'function') iniciarNivel6_1();
+                else if (typeof iniciarNivel61 === 'function') iniciarNivel61();
+                else if (typeof iniciarNivel6Parte1 === 'function') iniciarNivel6Parte1();
             }
-            return;
-        }
-        _abrirNivelOriginal(nivel, extremo);
-    };
-
-    const _volverAlMenuOriginal = volverAlMenu;
+            else if (numNivel === 7 && typeof iniciarNivel7 === 'function') iniciarNivel7();
+        });
+    }
+   const _volverAlMenuOriginal = volverAlMenu;
     volverAlMenu = function() {
         if (typeof animacionIdNivel5 !== 'undefined') cancelAnimationFrame(animacionIdNivel5);
         if (typeof animacionIdNivel6 !== 'undefined') cancelAnimationFrame(animacionIdNivel6);
+        if (typeof animacionIdNivel6_1 !== 'undefined') cancelAnimationFrame(animacionIdNivel6_1);
+        if (typeof detenerMusicaNivel6_1 === 'function') detenerMusicaNivel6_1();
         if (typeof animacionIdNivel7 !== 'undefined') cancelAnimationFrame(animacionIdNivel7);
         estadoMarineP2.disparando = false;
         estadoMarineP2.escudoActivo = false;
@@ -594,9 +628,20 @@
 
     function iniciarNivel5() {
         cancelAnimationFrame(animacionIdNivel5);
-        clearInterval(intervaloContador);
+        if (typeof intervaloContador !== 'undefined') clearInterval(intervaloContador);
         textoContador = '';
+
+        juegoActivo = true;
+        nivelActual = 5;
+
         activarPantallaCompletaParte2();
+
+        if (!canvas.width || canvas.width < 100) {
+            canvas.width = canvas.clientWidth || window.innerWidth || 1000;
+        }
+        if (!canvas.height || canvas.height < 100) {
+            canvas.height = canvas.clientHeight || window.innerHeight || 650;
+        }
 
         const h = canvas.height;
         const sueloY = h - 105;
@@ -605,7 +650,7 @@
         jugador.vidasMax = 10;
         jugador.vidas = 10;
         jugador.invulnerableHasta = 0;
-        actualizarCorazonesUI();
+        if (typeof actualizarCorazonesUI === 'function') actualizarCorazonesUI();
 
         estadoMarineP2.escudoActivo = false;
         estadoMarineP2.escudoGolpesRestantes = 3;
@@ -858,7 +903,7 @@
 
         jugador.vidas = Math.max(0, jugador.vidas - cantidad);
         jugador.invulnerableHasta = ahora + 1150;
-        actualizarCorazonesUI();
+        if (typeof actualizarCorazonesUI === 'function') actualizarCorazonesUI();
 
         if (jugador.vidas <= 0) {
             puedeMoverse = false;
@@ -885,7 +930,7 @@
         jugador.vidas = jugador.vidasMax;
         jugador.invulnerableHasta = ahora + 1200;
         destelloCuracionHastaN5 = ahora + 1400;
-        actualizarCorazonesUI();
+        if (typeof actualizarCorazonesUI === 'function') actualizarCorazonesUI();
 
         // Posicionar al jugador en el sector izquierdo/inferior de la plaza central
         playerN5.x = w * 0.22;
@@ -898,8 +943,8 @@
         crateresPlazaN5 = [];
         for (let i = 0; i < 14; i++) {
             crateresPlazaN5.push({
-                x: 110 + ((i * 197) % (w - 220)),
-                y: 110 + ((i * 139) % (h - 220)),
+                x: 110 + ((i * 197) % Math.max(200, w - 220)),
+                y: 110 + ((i * 139) % Math.max(200, h - 220)),
                 radio: 22 + (i % 4) * 14
             });
         }
@@ -1106,7 +1151,7 @@
         ctx.fillRect(0, h - 24, w, 24);
     }
 
-    // DISEÑO ATERRADOR Y BIOMECÁNICO DEL JEFE FINAL EN VISTA AÉREA (VON RYAN'S LEAPER)[cite: 12]
+    // DISEÑO ATERRADOR Y BIOMECÁNICO DEL JEFE FINAL EN VISTA AÉREA (VON RYAN'S LEAPER)
     function dibujarJefeVonRyanTopDownN5(jefe, ahora) {
         const golpeado = ahora < jefe.flashHasta;
         const tam = jefe.tam; // 138px (3 veces el jugador)
@@ -1134,21 +1179,21 @@
 
         ctx.rotate(jefe.angulo);
 
-        // Animación agresiva de las 4 guadañas[cite: 12]
+        // Animación agresiva de las 4 guadañas
         let anguloGuadanaSup = 0.85 + Math.sin(ahora / 105) * 0.16;
         let anguloGuadanaInf = 0.48 + Math.cos(ahora / 105) * 0.14;
         let empujeFrontal = 0;
 
         if (jefe.estado === 'aviso_embestida') {
-            anguloGuadanaSup = 1.45; // Abre las 4 guadañas como tenazas gigantes antes de embestir
+            anguloGuadanaSup = 1.45;
             anguloGuadanaInf = 1.05;
         } else if (jefe.estado === 'embistiendo') {
-            anguloGuadanaSup = 0.32; // Cierra las 4 cuchillas al frente triturando el aire
+            anguloGuadanaSup = 0.32;
             anguloGuadanaInf = 0.18;
             empujeFrontal = 20;
         }
 
-        // 1. COLA LÁTIGO ARTICULADA CON VÉRTEBRAS ESPINOSAS Y AGUIJÓN VENENOSO[cite: 12]
+        // 1. COLA LÁTIGO ARTICULADA CON VÉRTEBRAS ESPINOSAS Y AGUIJÓN VENENOSO
         let anguloCola = Math.sin(ahora / 130) * 0.28;
         if (jefe.estado === 'aviso_cola') {
             anguloCola = -1.05;
@@ -1165,7 +1210,6 @@
             const cySeg = Math.sin(ahora / 120 + s * 0.9) * (3 + s * 1.5);
             const rSeg = Math.max(4.5, 13 - s * 1.5);
 
-            // Vértebra quitinosa
             ctx.fillStyle = golpeado ? '#ffffff' : (s % 2 === 0 ? '#3b0764' : '#f3e8ff');
             ctx.strokeStyle = '#1e1b4b';
             ctx.lineWidth = 1.6;
@@ -1178,7 +1222,6 @@
             ctx.fill();
             ctx.stroke();
 
-            // Espinas laterales de la cola
             ctx.fillStyle = golpeado ? '#ffffff' : '#9f1239';
             ctx.beginPath();
             ctx.moveTo(cxSeg, cySeg - rSeg);
@@ -1189,7 +1232,6 @@
             ctx.lineTo(cxSeg - 8, cySeg + rSeg - 2);
             ctx.fill();
         }
-        // Aguijón curvo letal en la punta de la cola[cite: 12]
         const puntaX = -R * 2.15;
         ctx.fillStyle = golpeado ? '#ffffff' : '#be123c';
         ctx.strokeStyle = '#fecdd3';
@@ -1203,14 +1245,12 @@
         ctx.stroke();
         ctx.restore();
 
-        // 2. LAS 4 CUCHILLAS GUADAÑA ARTICULADAS ABIERTAS (2 COLOSALES + 2 SEGADORAS)[cite: 12]
+        // 2. LAS 4 CUCHILLAS GUADAÑA ARTICULADAS ABIERTAS
         [-1, 1].forEach(lado => {
-            // A) Par Superior: Guadañas biomecánicas gigantes con codo articulado[cite: 12]
             ctx.save();
             ctx.translate(R * 0.12 + empujeFrontal * 0.6, lado * R * 0.38);
             ctx.rotate(lado * anguloGuadanaSup);
 
-            // Húmero quitinoso con púas
             ctx.fillStyle = golpeado ? '#ffffff' : '#e9d5ff';
             ctx.strokeStyle = '#2e1065';
             ctx.lineWidth = 2;
@@ -1224,7 +1264,6 @@
             ctx.fill();
             ctx.stroke();
 
-            // Espolón óseo en el codo
             ctx.fillStyle = golpeado ? '#ffffff' : '#581c87';
             ctx.beginPath();
             ctx.moveTo(R * 0.58, lado * 8);
@@ -1233,7 +1272,6 @@
             ctx.closePath();
             ctx.fill();
 
-            // Antebrazo articulado hacia adelante[cite: 12]
             ctx.translate(R * 0.72, 0);
             ctx.rotate(-lado * 0.62);
 
@@ -1242,7 +1280,6 @@
             ctx.roundRect(0, -6, R * 0.58, 12, 3);
             ctx.fill();
 
-            // Hoja guadaña curva serrada carmesí-negra de gran tamaño[cite: 12]
             const hojaGrad = ctx.createLinearGradient(R * 0.52, 0, R * 1.65, -lado * 26);
             hojaGrad.addColorStop(0, golpeado ? '#ffffff' : '#090d16');
             hojaGrad.addColorStop(0.45, golpeado ? '#ffffff' : '#881337');
@@ -1253,7 +1290,6 @@
             ctx.beginPath();
             ctx.moveTo(R * 0.52, -7);
             ctx.quadraticCurveTo(R * 1.25, -lado * 22, R * 1.68, -lado * 34);
-            // Dientes de sierra en el filo interior
             ctx.lineTo(R * 1.38, -lado * 12);
             ctx.lineTo(R * 1.28, -lado * 16);
             ctx.lineTo(R * 1.12, -lado * 4);
@@ -1265,7 +1301,6 @@
             ctx.stroke();
             ctx.restore();
 
-            // B) Par Inferior: Garras segadoras frontales afiladas[cite: 12]
             ctx.save();
             ctx.translate(R * 0.36 + empujeFrontal, lado * R * 0.28);
             ctx.rotate(lado * anguloGuadanaInf);
@@ -1293,8 +1328,7 @@
             ctx.restore();
         });
 
-        // 3. TORSO ESQUELÉTICO SEGMENTADO Y COSTILLAS QUITIINOSAS (Sin forma ovalada)
-        // Caja torácica angular pálida con costillas expuestas
+        // 3. TORSO ESQUELÉTICO SEGMENTADO Y COSTILLAS QUITIINOSAS
         ctx.fillStyle = golpeado ? '#ffffff' : '#ede9fe';
         ctx.strokeStyle = '#2e1065';
         ctx.lineWidth = 2.2;
@@ -1311,7 +1345,6 @@
         ctx.fill();
         ctx.stroke();
 
-        // Costillas laterales oscuras y músculo carmesí pulsante entre placas
         ctx.strokeStyle = '#881337';
         ctx.lineWidth = 3;
         for (let rib = -R * 0.38; rib <= R * 0.26; rib += 16) {
@@ -1323,7 +1356,6 @@
             ctx.stroke();
         }
 
-        // Placas blindadas dorsales afiladas morado-negro en forma de punta de flecha
         const placas = [
             { x: -R * 0.52, w: 28, h: R * 0.32 },
             { x: -R * 0.24, w: 34, h: R * 0.44 },
@@ -1344,7 +1376,6 @@
             ctx.fill();
             ctx.stroke();
 
-            // Espina dorsal central afilada
             ctx.fillStyle = golpeado ? '#ffffff' : '#f43f5e';
             ctx.beginPath();
             ctx.moveTo(pl.x + pl.w + 6, 0);
@@ -1354,8 +1385,7 @@
             ctx.fill();
         });
 
-        // 4. CRÁNEO DE PESADILLA, MANDÍBULAS ABIERTAS Y TENTÁCULOS FACIALES NARANJAS[cite: 12]
-        // Tentáculos bucales retorciéndose bajo el cráneo
+        // 4. CRÁNEO DE PESADILLA, MANDÍBULAS ABIERTAS Y TENTÁCULOS FACIALES NARANJAS
         const vib = Math.sin(ahora / 65) * 4.5;
         ctx.strokeStyle = '#f97316';
         ctx.lineWidth = 3.4;
@@ -1372,7 +1402,6 @@
             ctx.stroke();
         });
 
-        // Mandíbulas laterales con colmillos
         [-1, 1].forEach(lado => {
             ctx.fillStyle = golpeado ? '#ffffff' : '#f3e8ff';
             ctx.strokeStyle = '#3b0764';
@@ -1386,7 +1415,6 @@
             ctx.stroke();
         });
 
-        // Cráneo alargado con cresta sagital ósea[cite: 12]
         ctx.fillStyle = golpeado ? '#ffffff' : '#3b0764';
         ctx.strokeStyle = '#c084fc';
         ctx.lineWidth = 1.8;
@@ -1399,7 +1427,6 @@
         ctx.fill();
         ctx.stroke();
 
-        // Cresta afilada central del cráneo
         ctx.fillStyle = golpeado ? '#ffffff' : '#f3e8ff';
         ctx.beginPath();
         ctx.moveTo(R * 0.32, -4);
@@ -1408,7 +1435,6 @@
         ctx.closePath();
         ctx.fill();
 
-        // 4 Ojos infernales brillantes
         ctx.fillStyle = '#facc15';
         ctx.beginPath();
         ctx.ellipse(R * 0.66, -9, 4.5, 2.2, 0.25, 0, Math.PI * 2);
@@ -2310,11 +2336,9 @@
 
         // --- FASE DE EXPLOSIÓN DEL JEFE + CINEMÁTICA CON SOLDADOS ALIADOS -> NIVEL 6 ---
         if (explosionJefeN5 || (cinematicaAliadosN5 && cinematicaAliadosN5.activa)) {
-            // 1. Renderizar explosión masiva del Jefe Final
             if (explosionJefeN5) {
                 const tExp = (ahora - explosionJefeN5.inicio) / explosionJefeN5.duracion;
                 if (tExp <= 1) {
-                    // Onda expansiva doble
                     ctx.save();
                     ctx.strokeStyle = `rgba(244, 63, 94, ${1 - tExp})`;
                     ctx.lineWidth = 10 * (1 - tExp) + 2;
@@ -2328,7 +2352,6 @@
                     ctx.arc(explosionJefeN5.x, explosionJefeN5.y, tExp * 170, 0, Math.PI * 2);
                     ctx.stroke();
 
-                    // Núcleo brillante
                     if (tExp < 0.45) {
                         const rNuc = (1 - tExp / 0.45) * 95;
                         const nucGrad = ctx.createRadialGradient(explosionJefeN5.x, explosionJefeN5.y, 4, explosionJefeN5.x, explosionJefeN5.y, rNuc);
@@ -2341,7 +2364,6 @@
                         ctx.fill();
                     }
 
-                    // Fragmentos volando por toda la plaza
                     explosionJefeN5.fragmentos.forEach(fr => {
                         fr.x += fr.vx;
                         fr.y += fr.vy;
@@ -2364,21 +2386,17 @@
                 }
             }
 
-            // 2. Cinemática donde el jugador camina hacia los Soldados Aliados y pasa al Nivel 6
             if (cinematicaAliadosN5 && cinematicaAliadosN5.activa) {
-                let aliadosEnPosicion = true;
                 cinematicaAliadosN5.aliados.forEach(al => {
                     const dxA = al.destX - al.x;
                     const dyA = al.destY - al.y;
                     const distA = Math.hypot(dxA, dyA);
                     if (distA > 4) {
-                        aliadosEnPosicion = false;
                         al.x += (dxA / distA) * 5.2;
                         al.y += (dyA / distA) * 5.2;
                     }
                 });
 
-                // Mover automáticamente al jugador hacia el comandante aliado
                 const destinoJugX = w * 0.62 - jugador.tam / 2;
                 const destinoJugY = h * 0.50 - jugador.tam / 2;
                 const dxJ = destinoJugX - playerN5.x;
@@ -2408,13 +2426,10 @@
                     ctx.fillText('¡REFUERZOS ALIADOS: "BUEN TRABAJO, HERMANO. AVANCEMOS AL SECTOR 6"!', w / 2, h * 0.22);
                     ctx.restore();
 
-                    // Tras 2.4 segundos con los aliados, iniciar automáticamente el Nivel 6
                     if (!cinematicaAliadosN5.transicionIniciada && ahora - cinematicaAliadosN5.reunidoEn >= 2400) {
                         cinematicaAliadosN5.transicionIniciada = true;
                         textoContador = '';
-                        if (typeof abrirNivel === 'function') {
-                            abrirNivel(6, modoExtremo);
-                        }
+                        arrancarNivelParte2(6, modoExtremo);
                         return;
                     }
                 }
@@ -2456,9 +2471,7 @@
         const nuevoJugCx = playerN5.x + jugador.tam / 2;
         const nuevoJugCy = playerN5.y + jugador.tam / 2;
 
-        // 2. AUTO-APUNTADO INTELIGENTE:
-        //    Apunta al enemigo normal más cercano si hay alguno más cerca que el jefe;
-        //    de lo contrario apunta directo al Jefe Final.
+        // 2. AUTO-APUNTADO INTELIGENTE
         let objetivoX = null;
         let objetivoY = null;
         let distanciaMinima = Infinity;
@@ -2499,15 +2512,14 @@
                 });
             }
 
-            // Refuerzos periódicos de Tiránidos normales para ayudar al jefe
             if (jefeFinalN5 && !jefeFinalN5.muerto && minionsTopDownN5.length < 4 && ahora - ultimoSpawnMinionTopDownN5 >= 5200) {
                 ultimoSpawnMinionTopDownN5 = ahora;
                 const lado = Math.floor(Math.random() * 4);
                 let sx = w / 2, sy = h / 2;
-                if (lado === 0) { sx = borde + 10; sy = borde + Math.random() * (h - borde * 2 - 60); }
-                else if (lado === 1) { sx = w - borde - 70; sy = borde + Math.random() * (h - borde * 2 - 60); }
-                else if (lado === 2) { sx = borde + Math.random() * (w - borde * 2 - 60); sy = borde + 10; }
-                else { sx = borde + Math.random() * (w - borde * 2 - 60); sy = h - borde - 70; }
+                if (lado === 0) { sx = borde + 10; sy = borde + Math.random() * Math.max(40, h - borde * 2 - 60); }
+                else if (lado === 1) { sx = w - borde - 70; sy = borde + Math.random() * Math.max(40, h - borde * 2 - 60); }
+                else if (lado === 2) { sx = borde + Math.random() * Math.max(40, w - borde * 2 - 60); sy = borde + 10; }
+                else { sx = borde + Math.random() * Math.max(40, w - borde * 2 - 60); sy = h - borde - 70; }
                 minionsTopDownN5.push(crearEnemigoTiranidoN5(sx, sy, true));
             }
         }
@@ -2531,7 +2543,7 @@
             return true;
         });
 
-        // 5. Avisos de lluvia de 10 ácidos (avisan 2 segundos antes de caer)
+        // 5. Avisos de lluvia de 10 ácidos
         avisosAcidoTopDownN5 = avisosAcidoTopDownN5.filter(av => {
             const transcurrido = ahora - av.creadoEn;
             const progreso = Math.min(1, transcurrido / 2000);
@@ -2564,7 +2576,7 @@
             }
         });
 
-        // 6. IA y Ataques Aleatorios del Jefe Final (3000 HP, 3x jugador, muy rápido)
+        // 6. IA y Ataques Aleatorios del Jefe Final
         if (jefeFinalN5 && !jefeFinalN5.muerto) {
             if (puedeMoverse && jugador.vidas > 0) {
                 const dx = nuevoJugCx - jefeFinalN5.x;
@@ -2579,7 +2591,6 @@
                     if (ahora >= jefeFinalN5.proximoAtaqueEn) {
                         const eleccion = Math.random();
                         if (eleccion < 0.38) {
-                            // ATAQUE 1: EMBESTIDA RELÁMPAGO CON 4 CUCHILLAS (Avisa 1 segundo antes)
                             jefeFinalN5.estado = 'aviso_embestida';
                             jefeFinalN5.inicioEstado = ahora;
                             jefeFinalN5.embestidaOrigenX = jefeFinalN5.x;
@@ -2591,19 +2602,17 @@
                             jefeFinalN5.embestidaDestinoY = Math.max(borde + 55, Math.min(h - borde - 55, jefeFinalN5.y + Math.sin(angEmb) * distEmb));
                             jefeFinalN5.embestidaGolpeo = false;
                         } else if (eleccion < 0.70) {
-                            // ATAQUE 2: LLUVIA DE 10 ÁCIDOS ALEATORIOS POR TODO EL MAPA (Avisa 2 segundos antes)
                             jefeFinalN5.estado = 'aviso_acido';
                             jefeFinalN5.inicioEstado = ahora;
                             for (let k = 0; k < 10; k++) {
                                 avisosAcidoTopDownN5.push({
-                                    x: borde + 45 + Math.random() * (w - borde * 2 - 90),
-                                    y: borde + 45 + Math.random() * (h - borde * 2 - 90),
+                                    x: borde + 45 + Math.random() * Math.max(60, w - borde * 2 - 90),
+                                    y: borde + 45 + Math.random() * Math.max(60, h - borde * 2 - 90),
                                     radio: 44,
                                     creadoEn: ahora
                                 });
                             }
                         } else {
-                            // ATAQUE 3: BARRIDO DE COLA EN LÍNEA CURVA DE GRAN ALCANCE (Avisa 1 segundo antes)
                             jefeFinalN5.estado = 'aviso_cola';
                             jefeFinalN5.inicioEstado = ahora;
                             jefeFinalN5.colaAnguloCentro = Math.atan2(dy, dx);
@@ -2665,13 +2674,11 @@
                     }
                 }
 
-                // Contacto directo con el cuerpo del jefe
                 if (Math.hypot(nuevoJugCx - jefeFinalN5.x, nuevoJugCy - jefeFinalN5.y) < jefeFinalN5.radio * 0.85 + jugador.tam * 0.4) {
                     recibirDanioJugadorNivel5(1, true);
                 }
             }
 
-            // DIBUJO DE AVISOS VISUALES DEL JEFE ANTES DE GOLPEAR
             if (jefeFinalN5.estado === 'aviso_embestida') {
                 const pAviso = Math.min(1, (ahora - jefeFinalN5.inicioEstado) / 1000);
                 ctx.save();
@@ -2712,10 +2719,8 @@
                 ctx.restore();
             }
 
-            // Dibujar al Jefe Final Von Ryan's Leaper (3x jugador, diseño aterrador)
             dibujarJefeVonRyanTopDownN5(jefeFinalN5, ahora);
 
-            // Barra superior de vida del Jefe Final (3000 HP)
             const barW = Math.min(540, w * 0.60);
             const barX = (w - barW) / 2;
             ctx.fillStyle = 'rgba(15, 5, 25, 0.90)';
@@ -2829,7 +2834,7 @@
     // 11. BUCLE PRINCIPAL DEL NIVEL 5
     // ============================================================
     function bucleNivel5() {
-        if (!juegoActivo || nivelActual !== 5) return;
+        if (!juegoActivo || Number(nivelActual) !== 5 || !playerN5) return;
         const ahora = Date.now();
         const w = canvas.width;
         const h = canvas.height;
@@ -3205,7 +3210,7 @@
             }
         });
 
-        estadoMarineP2.balas = estadoMarineP2.balas.filter(b => {
+       estadoMarineP2.balas = estadoMarineP2.balas.filter(b => {
             b.x += b.vx;
             const bxScreen = b.x - camaraX_N5;
 
@@ -3214,7 +3219,8 @@
                 if (b.x >= en.x && b.x <= en.x + en.tam && b.y >= en.y && b.y <= en.y + en.tam) {
                     en.vida -= b.danio;
                     en.flashHasta = ahora + 75;
-                    if (en.vida <= 0) enemigosN5.splice(i, 1);
+        
+                if (en.vida <= 0) enemigosN5.splice(i, 1);
                     return false;
                 }
             }
@@ -3261,5 +3267,16 @@
         animacionIdNivel5 = requestAnimationFrame(bucleNivel5);
     }
 
-    inicializarUIParte2();
+    // Ejecutar después de que carguen todos los archivos (nivel 6 y 7 incluidos)
+    window.addEventListener('load', () => {
+        inicializarUIParte2();
+        const prevAbrirNivel = window.abrirNivel;
+        window.abrirNivel = function(nivel, extremo = false) {
+            if (Number(nivel) >= 5) {
+                arrancarNivelParte2(Number(nivel), extremo);
+                return;
+            }
+            if (typeof prevAbrirNivel === 'function') prevAbrirNivel(nivel, extremo);
+        };
+    });
 </script>
