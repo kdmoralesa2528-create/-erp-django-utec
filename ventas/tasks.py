@@ -103,7 +103,7 @@ def enviar_confirmacion_pedido(self, pedido_id: int) -> dict:
 )
 def verificar_stock_bajo(self, umbral: int = 5) -> dict:
     """Verifica productos activos con stock menor al umbral y envía alerta."""
-    from inventario.models import Producto
+    from ventas.models import Producto
 
     productos_bajos = list(
         Producto.objects.filter(activo=True, stock__lt=umbral)
