@@ -6,4 +6,4 @@ __pycache__/
 htmlcov/
 .coverage
 .coverage.*
-coverage.xml
+coverage.xmlenv_erp/ 
